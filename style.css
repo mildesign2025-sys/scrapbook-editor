@@ -1,0 +1,220 @@
+:root {
+    --canvas-bg: #EAE8E4; /* Faint warm off-white canvas base */
+    --supre-blue: #2A4B9B;
+    --supre-red: #D73C2C;
+    --supre-yellow: #ECAE28;
+    --supre-green: #59A060;
+    --supre-black: #1A1A1A;
+    --supre-purple: #462A4F;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--canvas-bg);
+    background-image: url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)" opacity="0.08"/%3E%3C/svg%3E');
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    color: var(--supre-black);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Clear all UI containers - just floating geometry */
+#ui-container {
+    position: absolute;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: transparent;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    text-align: center;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+}
+
+.title {
+    font-size: 3.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: -2px;
+    color: var(--supre-black);
+    background-color: transparent;
+}
+
+.subtitle {
+    font-size: 1.2rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: var(--supre-red);
+    background-color: transparent;
+}
+
+.upload-btn-wrapper {
+    position: relative;
+    overflow: hidden;
+    display: inline-block;
+}
+
+#toolbar {
+    position: absolute;
+    bottom: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 15px;
+    background: transparent;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    z-index: 1000;
+    align-items: center;
+}
+
+/* Remove divider */
+.toolbar-divider {
+    display: none;
+}
+
+/* Floating Geometry Buttons */
+.btn {
+    border: none;
+    padding: 18px 24px;
+    border-radius: 0px;
+    font-weight: 800;
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+    box-shadow: none;
+    line-height: 1;
+}
+
+/* Individual Color Blocks */
+#modeTear { background-color: var(--supre-green); color: var(--canvas-bg); }
+#modePunch { background-color: var(--supre-blue); color: var(--canvas-bg); }
+#modeDrag { background-color: var(--supre-yellow); color: var(--supre-black); }
+#modeDelete { background-color: var(--supre-black); color: var(--canvas-bg); }
+.upload-btn-wrapper .btn { background-color: var(--supre-red); color: var(--canvas-bg); }
+#resetBtn { background-color: var(--supre-purple); color: var(--canvas-bg); }
+
+/* Activation States (Geometric Expansion instead of shadow) */
+.btn:hover {
+    transform: scale(1.05);
+}
+
+.btn.active {
+    transform: scale(1.15);
+    z-index: 10;
+    outline: 4px solid var(--supre-black);
+    outline-offset: -8px;
+}
+
+.upload-btn-wrapper input[type=file] {
+    font-size: 100px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.hidden { display: none !important; }
+
+#workspace {
+    flex-grow: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.dropzone {
+    width: 300px;
+    height: 400px;
+    background-color: transparent;
+    border: 3px solid var(--supre-black);
+    border-radius: 0px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--supre-black);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: background-color 0.2s;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.dropzone.dragover {
+    background-color: var(--supre-yellow);
+    color: var(--supre-black);
+}
+
+#torn-pieces-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.torn-piece {
+    position: absolute;
+    /* ZERO SHADOWS for absolute flat 2D feel */
+    filter: none;
+    transform-origin: 0 0;
+}
+
+/* Modifiers for modes on the container */
+body.mode-drag .torn-piece { cursor: grab; }
+body.mode-drag .torn-piece:active { 
+    cursor: grabbing; 
+    z-index: 999; 
+}
+
+body.mode-delete .torn-piece {
+    cursor: pointer;
+}
+body.mode-delete .torn-piece:hover {
+    opacity: 0.5 !important;
+}
+
+body.mode-tear .torn-piece { 
+    cursor: crosshair; 
+    cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><rect x='10' y='0' width='4' height='24' fill='black'/><rect x='0' y='10' width='24' height='4' fill='black'/></svg>") 12 12, crosshair;
+}
+
+body.mode-punch .torn-piece { 
+    cursor: crosshair; 
+    /* Suprematist crosshair */
+    cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'><circle cx='15' cy='15' r='14' fill='none' stroke='black' stroke-width='2'/><circle cx='15' cy='15' r='4' fill='black'/></svg>") 15 15, crosshair;
+}
+
+#punchControl {
+    display: flex;
+    align-items: center;
+    background-color: var(--supre-black);
+    padding: 10px;
+    height: 100%;
+}
+
+#punchSize {
+    accent-color: var(--supre-blue);
+    width: 60px;
+}

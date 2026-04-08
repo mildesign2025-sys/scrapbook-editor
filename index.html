@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scrapbook Image Tearer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-container">
+        <h1 class="title">My Scrapbook</h1>
+        <p class="subtitle">Upload a photo to get started. Tear it or Drag it to arrange.</p>
+        <div class="upload-btn-wrapper" style="margin-top: 15px;">
+            <button class="btn btn-primary">Select Photos</button>
+            <input type="file" id="imageInput" accept="image/png, image/jpeg, image/webp" multiple />
+        </div>
+    </div>
+
+    <div id="toolbar" class="hidden">
+        <button class="btn btn-primary active" id="modeTear">🔪 Tear</button>
+        <button class="btn btn-secondary" id="modePunch">⭕ Hole Punch</button>
+        <div id="punchControl" class="hidden" style="display: flex; align-items: center; gap: 8px;">
+            <input type="range" id="punchSize" min="20" max="250" value="70" style="width: 80px; accent-color: var(--text-color);">
+        </div>
+        <button class="btn btn-secondary" id="modeDrag">🖐️ Drag</button>
+        <button class="btn btn-danger" id="modeDelete">🗑️ Delete</button>
+        <div class="toolbar-divider"></div>
+        <div class="upload-btn-wrapper">
+            <button class="btn btn-secondary">🖼️ Add Photos</button>
+            <input type="file" id="imageInputToolbar" accept="image/png, image/jpeg, image/webp" multiple />
+        </div>
+        <button class="btn btn-secondary" id="resetBtn">🧹 Clear All</button>
+    </div>
+    
+    <div id="workspace">
+        <div id="dropzone" class="dropzone empty">
+            <span class="drop-text">Drag & Drop Image Here</span>
+        </div>
+        <div id="torn-pieces-container"></div>
+    </div>
+
+    <div id="punchPreview" style="display:none; position:fixed; pointer-events:none; border:3px solid var(--supre-black); border-radius:50%; z-index:9999; transform: translate(-50%, -50%); background-color: transparent;"></div>
+    <!-- Paper texture overlay -->
+    <div class="paper-texture"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
