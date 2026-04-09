@@ -576,83 +576,121 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceCanvasWrapper.remove();
     }
 
-    // --- Kraft Paper Effect ---
+    // --- Kraft Paper Crumple Effect ---
     function applyKraftEffect(canvas) {
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const w = canvas.width;
         const h = canvas.height;
+
+        // Step 1: Procedural height map (crumple geometry)
+        function hash2(ix, iy) {
+            const n = Math.sin(ix * 127.1 + iy * 311.7) * 43758.5453123;
+            return n - Math.floor(n);
+        }
+        function valueNoise(x, y) {
+            const ix = Math.floor(x), iy = Math.floor(y);
+            const fx = x - ix, fy = y - iy;
+            const ux = fx * fx * (3 - 2 * fx);
+            const uy = fy * fy * (3 - 2 * fy);
+            const a = hash2(ix, iy),   b = hash2(ix+1, iy);
+            const c = hash2(ix, iy+1), d = hash2(ix+1, iy+1);
+            return a*(1-ux)*(1-uy) + b*ux*(1-uy) + c*(1-ux)*uy + d*ux*uy;
+        }
+        // Ridged noise: creates sharp crease lines
+        function ridged(x, y) {
+            return 1.0 - Math.abs(valueNoise(x, y) * 2 - 1);
+        }
+
+        const heightMap = new Float32Array(w * h);
+        for (let py = 0; py < h; py++) {
+            for (let px = 0; px < w; px++) {
+                const nx = px / w, ny = py / h;
+                // Large sweeping folds
+                const fold   = valueNoise(nx * 2.5 + 0.3, ny * 2.1 + 0.8) * 0.40;
+                // Medium wrinkle ridges
+                const ridge1 = ridged(nx * 5.5 + 1.2, ny * 4.8 + 0.5) * 0.28;
+                const ridge2 = ridged(nx * 9.0 + 2.7, ny * 7.3 + 1.9) * 0.18;
+                // Fine micro-creases
+                const micro  = ridged(nx * 18 + 3.1, ny * 14 + 4.6) * 0.14;
+                heightMap[py * w + px] = fold + ridge1 + ridge2 + micro;
+            }
+        }
+
+        // Step 2: Apply bump-map lighting to original photo pixels
         const imageData = ctx.getImageData(0, 0, w, h);
         const data = imageData.data;
 
-        // Kraft paper palette endpoints
-        // Shadows -> dark warm brown
-        const shadowR = 101, shadowG = 63, shadowB = 28;
-        // Midtones -> classic kraft tan
-        const midR = 188, midG = 143, midB = 90;
-        // Highlights -> aged cream
-        const hiR = 238, hiG = 220, hiB = 185;
+        // Directional light (top-left, slightly elevated)
+        const lx = 0.55, ly = -0.65, lz = 0.52;
+        const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
+        const ldx = lx/lLen, ldy = ly/lLen, ldz = lz/lLen;
+        // How dramatic wrinkle depth looks
+        const bumpStrength = 22.0;
 
-        for (let i = 0; i < data.length; i += 4) {
-            const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
-            if (a === 0) continue; // Skip transparent pixels
+        for (let py = 1; py < h - 1; py++) {
+            for (let px = 1; px < w - 1; px++) {
+                const idx = (py * w + px) * 4;
+                if (data[idx + 3] === 0) continue; // skip transparent
 
-            // 1. Luminance (perceived brightness)
-            const L = 0.299 * r + 0.587 * g + 0.114 * b;
-            const t = L / 255; // 0..1
+                // Sobel gradient -> surface normal
+                const dhdx = (heightMap[py * w + (px+1)] - heightMap[py * w + (px-1)]) * bumpStrength;
+                const dhdy = (heightMap[(py+1) * w + px] - heightMap[(py-1) * w + px]) * bumpStrength;
+                const nx_ = -dhdx, ny_ = -dhdy, nz_ = 1.0;
+                const nLen = Math.sqrt(nx_*nx_ + ny_*ny_ + nz_*nz_);
 
-            // 2. Two-stop kraft gradient: shadow -> mid -> highlight
-            let kr, kg, kb;
-            if (t < 0.5) {
-                const s = t / 0.5;
-                kr = shadowR + (midR - shadowR) * s;
-                kg = shadowG + (midG - shadowG) * s;
-                kb = shadowB + (midB - shadowB) * s;
-            } else {
-                const s = (t - 0.5) / 0.5;
-                kr = midR + (hiR - midR) * s;
-                kg = midG + (hiG - midG) * s;
-                kb = midB + (hiB - midB) * s;
+                // Diffuse (Lambert)
+                const diff = Math.max(0, (nx_/nLen)*ldx + (ny_/nLen)*ldy + (nz_/nLen)*ldz);
+                // Specular (Blinn-Phong) for ridge shine
+                const spec = Math.pow(Math.max(0, (nz_/nLen) * ((ldz + 1.0) / Math.sqrt(2))), 18) * 0.25;
+
+                const ambient = 0.42;
+                const light = ambient + (1 - ambient) * diff + spec;
+
+                data[idx]   = Math.min(255, data[idx]   * light);
+                data[idx+1] = Math.min(255, data[idx+1] * light);
+                data[idx+2] = Math.min(255, data[idx+2] * light);
             }
-
-            // 3. Procedural grain: coarse fiber layer + fine noise
-            const coarseGrain = (Math.random() - 0.5) * 28;
-            const fineGrain   = (Math.random() - 0.5) * 10;
-            const grain = coarseGrain + fineGrain;
-
-            data[i]   = Math.max(0, Math.min(255, kr + grain));
-            data[i+1] = Math.max(0, Math.min(255, kg + grain * 0.85));
-            data[i+2] = Math.max(0, Math.min(255, kb + grain * 0.6));
         }
-
         ctx.putImageData(imageData, 0, 0);
 
-        // 4. Crinkle highlight streaks (bright semi-transparent diagonal strokes)
-        for (let k = 0; k < 18; k++) {
-            const x1 = Math.random() * w;
-            const y1 = Math.random() * h;
-            const len = 30 + Math.random() * 120;
-            const angle = (Math.random() - 0.5) * 0.4; // nearly horizontal
-            const x2 = x1 + Math.cos(angle) * len;
-            const y2 = y1 + Math.sin(angle) * len;
-            const alpha = 0.03 + Math.random() * 0.07;
+        // Step 3: Subtle warm paper tint overlay (keeps photo colors, thin wash)
+        ctx.fillStyle = 'rgba(185, 148, 95, 0.12)';
+        ctx.fillRect(0, 0, w, h);
+
+        // Step 4: Crease highlight strokes (ridge bright lines)
+        for (let k = 0; k < 22; k++) {
+            const x1 = Math.random() * w, y1 = Math.random() * h;
+            const len = 40 + Math.random() * 160;
+            const angle = Math.random() * Math.PI * 2;
             ctx.beginPath();
             ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.strokeStyle = `rgba(255, 245, 220, ${alpha})`;
-            ctx.lineWidth = 1 + Math.random() * 3;
+            ctx.lineTo(x1 + Math.cos(angle) * len, y1 + Math.sin(angle) * len);
+            ctx.strokeStyle = 'rgba(255, 250, 235, ' + (0.02 + Math.random() * 0.06) + ')';
+            ctx.lineWidth = 0.5 + Math.random() * 2.5;
+            ctx.stroke();
+        }
+        // Crease shadow lines (fold valleys)
+        for (let k = 0; k < 14; k++) {
+            const x1 = Math.random() * w, y1 = Math.random() * h;
+            const len = 30 + Math.random() * 100;
+            const angle = Math.random() * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x1 + Math.cos(angle) * len, y1 + Math.sin(angle) * len);
+            ctx.strokeStyle = 'rgba(60, 35, 10, ' + (0.025 + Math.random() * 0.055) + ')';
+            ctx.lineWidth = 0.5 + Math.random() * 1.5;
             ctx.stroke();
         }
 
-        // 5. Vignette: radial gradient darkening towards edges
-        const cx = w / 2, cy = h / 2;
-        const radius = Math.max(w, h) * 0.75;
-        const vignette = ctx.createRadialGradient(cx, cy, radius * 0.3, cx, cy, radius);
-        vignette.addColorStop(0, 'rgba(80, 45, 10, 0)');
-        vignette.addColorStop(1, 'rgba(60, 35, 8, 0.38)');
-        ctx.fillStyle = vignette;
+        // Step 5: Soft vignette
+        const cxv = w / 2, cyv = h / 2;
+        const vRad = Math.max(w, h) * 0.72;
+        const vg = ctx.createRadialGradient(cxv, cyv, vRad * 0.25, cxv, cyv, vRad);
+        vg.addColorStop(0, 'rgba(30, 18, 5, 0)');
+        vg.addColorStop(1, 'rgba(30, 18, 5, 0.32)');
+        ctx.fillStyle = vg;
         ctx.fillRect(0, 0, w, h);
     }
-
     // Wire up Kraft Button
     kraftBtn.addEventListener('click', () => {
         if (!activePiece) return;
