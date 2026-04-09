@@ -44,9 +44,13 @@ document.addEventListener('DOMContentLoaded', () => {
     punchSizeSlider.addEventListener('input', updatePunchPreviewSize);
     updatePunchPreviewSize(); // Initial sizing
 
-    const handleUpload = (e) => {
+    const handleUpload = async (e) => {
         if (e.target.files && e.target.files.length > 0) {
-            Array.from(e.target.files).forEach(file => loadImage(file));
+            const files = Array.from(e.target.files).filter(file => file.type.startsWith('image/'));
+            if (files.length > 0) {
+                await Promise.all(files.map(file => loadImagePromise(file)));
+                saveState();
+            }
         }
         e.target.value = ''; // Reset for re-uploading same file
     };
@@ -63,15 +67,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if(!uiContainer.classList.contains('hidden')) dropzone.classList.remove('dragover'); 
     });
     
-    document.body.addEventListener('drop', (e) => {
+    document.body.addEventListener('drop', async (e) => {
         e.preventDefault();
         dropzone.classList.remove('dragover');
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            Array.from(e.dataTransfer.files).forEach(file => {
-                if(file.type.startsWith('image/')) {
-                    loadImage(file);
-                }
-            });
+            const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+            if (files.length > 0) {
+                await Promise.all(files.map(file => loadImagePromise(file)));
+                saveState();
+            }
         }
     });
 
@@ -141,20 +145,23 @@ document.addEventListener('DOMContentLoaded', () => {
         saveState();
     });
 
-    function loadImage(file) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.onload = () => {
-                initCanvas(img);
-                uiContainer.classList.add('hidden');
-                dropzone.classList.add('hidden');
-                toolbar.classList.remove('hidden');
-                updateMode('drag');
+    function loadImagePromise(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    initCanvas(img);
+                    uiContainer.classList.add('hidden');
+                    dropzone.classList.add('hidden');
+                    toolbar.classList.remove('hidden');
+                    updateMode('drag');
+                    resolve();
+                };
+                img.src = event.target.result;
             };
-            img.src = event.target.result;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        });
     }
 
     let imageOffsetCount = 0;
@@ -194,7 +201,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const rot = (Math.random() - 0.5) * 30; // Random tilt between -15 and 15 degrees
         
         createDraggableTornPiece(pieceCanvas, startX, startY, rot);
-        saveState();
     }
 
     // --- Math & Splitting logic ---
