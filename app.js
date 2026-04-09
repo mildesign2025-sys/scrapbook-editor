@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const files = Array.from(e.target.files).filter(file => file.type.startsWith('image/'));
             if (files.length > 0) {
                 await Promise.all(files.map(file => loadImagePromise(file)));
-                saveState();
+                requestAnimationFrame(() => setTimeout(saveState, 50));
             }
         }
         e.target.value = ''; // Reset for re-uploading same file
@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
             if (files.length > 0) {
                 await Promise.all(files.map(file => loadImagePromise(file)));
-                saveState();
+                requestAnimationFrame(() => setTimeout(saveState, 50));
             }
         }
     });
