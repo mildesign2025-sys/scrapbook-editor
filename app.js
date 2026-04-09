@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeDeleteBtn = document.getElementById('modeDelete');
+    const kraftBtn = document.getElementById('kraftBtn');
     let currentMode = 'tear'; // 'tear', 'punch', 'drag', or 'delete'
     document.body.classList.add('mode-tear');
 
@@ -574,6 +575,91 @@ document.addEventListener('DOMContentLoaded', () => {
 
         sourceCanvasWrapper.remove();
     }
+
+    // --- Kraft Paper Effect ---
+    function applyKraftEffect(canvas) {
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const w = canvas.width;
+        const h = canvas.height;
+        const imageData = ctx.getImageData(0, 0, w, h);
+        const data = imageData.data;
+
+        // Kraft paper palette endpoints
+        // Shadows -> dark warm brown
+        const shadowR = 101, shadowG = 63, shadowB = 28;
+        // Midtones -> classic kraft tan
+        const midR = 188, midG = 143, midB = 90;
+        // Highlights -> aged cream
+        const hiR = 238, hiG = 220, hiB = 185;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+            if (a === 0) continue; // Skip transparent pixels
+
+            // 1. Luminance (perceived brightness)
+            const L = 0.299 * r + 0.587 * g + 0.114 * b;
+            const t = L / 255; // 0..1
+
+            // 2. Two-stop kraft gradient: shadow -> mid -> highlight
+            let kr, kg, kb;
+            if (t < 0.5) {
+                const s = t / 0.5;
+                kr = shadowR + (midR - shadowR) * s;
+                kg = shadowG + (midG - shadowG) * s;
+                kb = shadowB + (midB - shadowB) * s;
+            } else {
+                const s = (t - 0.5) / 0.5;
+                kr = midR + (hiR - midR) * s;
+                kg = midG + (hiG - midG) * s;
+                kb = midB + (hiB - midB) * s;
+            }
+
+            // 3. Procedural grain: coarse fiber layer + fine noise
+            const coarseGrain = (Math.random() - 0.5) * 28;
+            const fineGrain   = (Math.random() - 0.5) * 10;
+            const grain = coarseGrain + fineGrain;
+
+            data[i]   = Math.max(0, Math.min(255, kr + grain));
+            data[i+1] = Math.max(0, Math.min(255, kg + grain * 0.85));
+            data[i+2] = Math.max(0, Math.min(255, kb + grain * 0.6));
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        // 4. Crinkle highlight streaks (bright semi-transparent diagonal strokes)
+        for (let k = 0; k < 18; k++) {
+            const x1 = Math.random() * w;
+            const y1 = Math.random() * h;
+            const len = 30 + Math.random() * 120;
+            const angle = (Math.random() - 0.5) * 0.4; // nearly horizontal
+            const x2 = x1 + Math.cos(angle) * len;
+            const y2 = y1 + Math.sin(angle) * len;
+            const alpha = 0.03 + Math.random() * 0.07;
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.strokeStyle = `rgba(255, 245, 220, ${alpha})`;
+            ctx.lineWidth = 1 + Math.random() * 3;
+            ctx.stroke();
+        }
+
+        // 5. Vignette: radial gradient darkening towards edges
+        const cx = w / 2, cy = h / 2;
+        const radius = Math.max(w, h) * 0.75;
+        const vignette = ctx.createRadialGradient(cx, cy, radius * 0.3, cx, cy, radius);
+        vignette.addColorStop(0, 'rgba(80, 45, 10, 0)');
+        vignette.addColorStop(1, 'rgba(60, 35, 8, 0.38)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, w, h);
+    }
+
+    // Wire up Kraft Button
+    kraftBtn.addEventListener('click', () => {
+        if (!activePiece) return;
+        const canvasEl = activePiece.querySelector('canvas');
+        if (!canvasEl) return;
+        applyKraftEffect(canvasEl);
+    });
 
     // --- Component Logic ---
     function createDraggableTornPiece(canvas, x, y, rotation, clipPath = null, currentScale = 1, initialOpacity = 1) {

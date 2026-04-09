@@ -109,6 +109,7 @@ body {
 #modeDelete { background-color: var(--supre-black); color: var(--canvas-bg); }
 .upload-btn-wrapper .btn { background-color: var(--supre-red); color: var(--canvas-bg); }
 #resetBtn { background-color: var(--supre-purple); color: var(--canvas-bg); }
+#kraftBtn { background-color: #8B5E3C; color: #F5EDD6; }
 
 /* Activation States (Geometric Expansion instead of shadow) */
 .btn:hover {
