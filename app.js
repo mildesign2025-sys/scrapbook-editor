@@ -576,120 +576,84 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceCanvasWrapper.remove();
     }
 
-    // --- Kraft Paper Crumple Effect ---
+    // --- Kraft Paper Texture Mapping (Flat Print Aesthetic) ---
     function applyKraftEffect(canvas) {
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const w = canvas.width;
         const h = canvas.height;
 
-        // Step 1: Procedural height map (crumple geometry)
-        function hash2(ix, iy) {
-            const n = Math.sin(ix * 127.1 + iy * 311.7) * 43758.5453123;
-            return n - Math.floor(n);
-        }
-        function valueNoise(x, y) {
-            const ix = Math.floor(x), iy = Math.floor(y);
-            const fx = x - ix, fy = y - iy;
-            const ux = fx * fx * (3 - 2 * fx);
-            const uy = fy * fy * (3 - 2 * fy);
-            const a = hash2(ix, iy),   b = hash2(ix+1, iy);
-            const c = hash2(ix, iy+1), d = hash2(ix+1, iy+1);
-            return a*(1-ux)*(1-uy) + b*ux*(1-uy) + c*(1-ux)*uy + d*ux*uy;
-        }
-        // Ridged noise: creates sharp crease lines
-        function ridged(x, y) {
-            return 1.0 - Math.abs(valueNoise(x, y) * 2 - 1);
-        }
+        // 1. Create Substrate (The Kraft Paper Base)
+        const substrate = document.createElement('canvas');
+        substrate.width = w;
+        substrate.height = h;
+        const sCtx = substrate.width > 0 ? substrate.getContext('2d') : null;
+        if (!sCtx) return;
 
-        const heightMap = new Float32Array(w * h);
-        for (let py = 0; py < h; py++) {
-            for (let px = 0; px < w; px++) {
-                const nx = px / w, ny = py / h;
-                // Large sweeping folds
-                const fold   = valueNoise(nx * 2.5 + 0.3, ny * 2.1 + 0.8) * 0.40;
-                // Medium wrinkle ridges
-                const ridge1 = ridged(nx * 5.5 + 1.2, ny * 4.8 + 0.5) * 0.28;
-                const ridge2 = ridged(nx * 9.0 + 2.7, ny * 7.3 + 1.9) * 0.18;
-                // Fine micro-creases
-                const micro  = ridged(nx * 18 + 3.1, ny * 14 + 4.6) * 0.14;
-                heightMap[py * w + px] = fold + ridge1 + ridge2 + micro;
-            }
+        // Base color (Recycled Kraft Tan)
+        sCtx.fillStyle = '#d8b589'; 
+        sCtx.fillRect(0, 0, w, h);
+
+        // Add "Recycled Fibers" and Noise to substrate
+        for (let i = 0; i < (w * h) / 1000; i++) {
+            const fx = Math.random() * w;
+            const fy = Math.random() * h;
+            const flen = 2 + Math.random() * 8;
+            const fang = Math.random() * Math.PI * 2;
+            sCtx.beginPath();
+            sCtx.moveTo(fx, fy);
+            sCtx.lineTo(fx + Math.cos(fang) * flen, fy + Math.sin(fang) * flen);
+            sCtx.strokeStyle = `rgba(80, 50, 20, ${0.05 + Math.random() * 0.1})`;
+            sCtx.lineWidth = 0.5 + Math.random();
+            sCtx.stroke();
         }
 
-        // Step 2: Apply bump-map lighting to original photo pixels
-        const imageData = ctx.getImageData(0, 0, w, h);
-        const data = imageData.data;
+        // 2. Prepare "Ink" (The Photo) on a temp canvas
+        const inkCanvas = document.createElement('canvas');
+        inkCanvas.width = w;
+        inkCanvas.height = h;
+        const iCtx = inkCanvas.getContext('2d');
+        
+        // --- Ink Bleed / Dot Gain Effect ---
+        // We draw with a tiny blur to simulate ink soaking into the porous fibers
+        iCtx.filter = 'blur(0.8px) saturate(0.85) contrast(1.1)';
+        iCtx.drawImage(canvas, 0, 0);
+        iCtx.filter = 'none';
 
-        // Directional light (top-left, slightly elevated)
-        const lx = 0.55, ly = -0.65, lz = 0.52;
-        const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
-        const ldx = lx/lLen, ldy = ly/lLen, ldz = lz/lLen;
-        // How dramatic wrinkle depth looks
-        const bumpStrength = 22.0;
+        // 3. Printing Process (Blending)
+        // Clear original canvas to apply substrate
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(substrate, 0, 0);
 
-        for (let py = 1; py < h - 1; py++) {
-            for (let px = 1; px < w - 1; px++) {
-                const idx = (py * w + px) * 4;
-                if (data[idx + 3] === 0) continue; // skip transparent
+        // Core "Printing" blend mode: Multiply sinks the ink into the paper texture
+        ctx.globalAlpha = 0.95; // Slight ink transparency
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.drawImage(inkCanvas, 0, 0);
 
-                // Sobel gradient -> surface normal
-                const dhdx = (heightMap[py * w + (px+1)] - heightMap[py * w + (px-1)]) * bumpStrength;
-                const dhdy = (heightMap[(py+1) * w + px] - heightMap[(py-1) * w + px]) * bumpStrength;
-                const nx_ = -dhdx, ny_ = -dhdy, nz_ = 1.0;
-                const nLen = Math.sqrt(nx_*nx_ + ny_*ny_ + nz_*nz_);
+        // Restore default composite
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1.0;
 
-                // Diffuse (Lambert)
-                const diff = Math.max(0, (nx_/nLen)*ldx + (ny_/nLen)*ldy + (nz_/nLen)*ldz);
-                // Specular (Blinn-Phong) for ridge shine
-                const spec = Math.pow(Math.max(0, (nz_/nLen) * ((ldz + 1.0) / Math.sqrt(2))), 18) * 0.25;
-
-                const ambient = 0.42;
-                const light = ambient + (1 - ambient) * diff + spec;
-
-                data[idx]   = Math.min(255, data[idx]   * light);
-                data[idx+1] = Math.min(255, data[idx+1] * light);
-                data[idx+2] = Math.min(255, data[idx+2] * light);
-            }
+        // 4. Final Surface Grain (Microscopic ink/paper noise)
+        const grainData = ctx.getImageData(0, 0, w, h);
+        const d = grainData.data;
+        for (let j = 0; j < d.length; j += 4) {
+            if (d[j+3] === 0) continue;
+            const g = (Math.random() - 0.5) * 15;
+            d[j] = Math.max(0, Math.min(255, d[j] + g));
+            d[j+1] = Math.max(0, Math.min(255, d[j+1] + g));
+            d[j+2] = Math.max(0, Math.min(255, d[j+2] + g));
         }
-        ctx.putImageData(imageData, 0, 0);
+        ctx.putImageData(grainData, 0, 0);
 
-        // Step 3: Subtle warm paper tint overlay (keeps photo colors, thin wash)
-        ctx.fillStyle = 'rgba(185, 148, 95, 0.12)';
-        ctx.fillRect(0, 0, w, h);
-
-        // Step 4: Crease highlight strokes (ridge bright lines)
-        for (let k = 0; k < 22; k++) {
-            const x1 = Math.random() * w, y1 = Math.random() * h;
-            const len = 40 + Math.random() * 160;
-            const angle = Math.random() * Math.PI * 2;
+        // Substrate detail: Subtle spots (pulp chunks)
+        for (let k = 0; k < 15; k++) {
+            const sx = Math.random() * w;
+            const sy = Math.random() * h;
             ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x1 + Math.cos(angle) * len, y1 + Math.sin(angle) * len);
-            ctx.strokeStyle = 'rgba(255, 250, 235, ' + (0.02 + Math.random() * 0.06) + ')';
-            ctx.lineWidth = 0.5 + Math.random() * 2.5;
-            ctx.stroke();
+            ctx.arc(sx, sy, 0.5 + Math.random() * 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(60, 40, 10, ${0.1 + Math.random() * 0.1})`;
+            ctx.fill();
         }
-        // Crease shadow lines (fold valleys)
-        for (let k = 0; k < 14; k++) {
-            const x1 = Math.random() * w, y1 = Math.random() * h;
-            const len = 30 + Math.random() * 100;
-            const angle = Math.random() * Math.PI * 2;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x1 + Math.cos(angle) * len, y1 + Math.sin(angle) * len);
-            ctx.strokeStyle = 'rgba(60, 35, 10, ' + (0.025 + Math.random() * 0.055) + ')';
-            ctx.lineWidth = 0.5 + Math.random() * 1.5;
-            ctx.stroke();
-        }
-
-        // Step 5: Soft vignette
-        const cxv = w / 2, cyv = h / 2;
-        const vRad = Math.max(w, h) * 0.72;
-        const vg = ctx.createRadialGradient(cxv, cyv, vRad * 0.25, cxv, cyv, vRad);
-        vg.addColorStop(0, 'rgba(30, 18, 5, 0)');
-        vg.addColorStop(1, 'rgba(30, 18, 5, 0.32)');
-        ctx.fillStyle = vg;
-        ctx.fillRect(0, 0, w, h);
     }
     // Wire up Kraft Button
     kraftBtn.addEventListener('click', () => {
