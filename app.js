@@ -576,89 +576,97 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceCanvasWrapper.remove();
     }
 
-    // --- Kraft Paper Realistic Crease Texture (Color Preserving) ---
+    // --- Kraft Paper Interconnected Fold Network (Color Preserving) ---
     function applyKraftEffect(canvas) {
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const w = canvas.width;
         const h = canvas.height;
 
-        // --- Step 1: Procedural Crease Generation ---
-        // We generate a network of random segments that look like paper folds
-        const numCreases = 15 + Math.floor(Math.random() * 10);
-        const creases = [];
+        const folds = [];
 
-        for (let i = 0; i < numCreases; i++) {
-            // Random start and end across the canvas
-            let x1 = Math.random() * w;
-            let y1 = Math.random() * h;
-            let angle = Math.random() * Math.PI * 2;
-            let length = w * 0.3 + Math.random() * w * 0.5;
+        // Helper to generate a jagged path between two points
+        function generateJaggedPath(x1, y1, x2, y2, depth = 0) {
+            const path = [{x: x1, y: y1}];
+            const dist = Math.hypot(x2 - x1, y2 - y1);
+            const segments = Math.max(2, Math.floor(dist / 40));
             
-            // Subdivide the crease to make it slightly jagged/organic
-            const segments = 3 + Math.floor(Math.random() * 4);
-            let currentX = x1;
-            let currentY = y1;
-            const points = [{x: currentX, y: currentY}];
+            let lastX = x1;
+            let lastY = y1;
 
-            for (let s = 0; s < segments; s++) {
-                angle += (Math.random() - 0.5) * 0.4; // Slight drift
-                const segLen = length / segments;
-                currentX += Math.cos(angle) * segLen;
-                currentY += Math.sin(angle) * segLen;
-                points.push({x: currentX, y: currentY});
+            for (let i = 1; i < segments; i++) {
+                const t = i / segments;
+                const baseX = x1 + (x2 - x1) * t;
+                const baseY = y1 + (y2 - y1) * t;
+                
+                const nx = -(y2 - y1) / dist;
+                const ny = (x2 - x1) / dist;
+                const jitter = (Math.random() - 0.5) * 20;
+                
+                const px = baseX + nx * jitter;
+                const py = baseY + ny * jitter;
+                path.push({x: px, y: py});
+                
+                if (depth < 1 && Math.random() > 0.8) {
+                    const branchAng = Math.random() * Math.PI * 2;
+                    const branchLen = dist * 0.4;
+                    folds.push(generateJaggedPath(px, py, px + Math.cos(branchAng) * branchLen, py + Math.sin(branchAng) * branchLen, depth + 1));
+                }
             }
-            creases.push(points);
+            path.push({x: x2, y: y2});
+            return path;
         }
 
-        // --- Step 2: Render Creases (Shadow & Highlight Pairs) ---
-        // This simulates the peak and valley of a fold, which creates a 3D effect without lights
-        
+        const anchors = [
+            {x: 0, y: Math.random() * h},
+            {x: w, y: Math.random() * h},
+            {x: Math.random() * w, y: 0},
+            {x: Math.random() * w, y: h},
+            {x: w / 2 + (Math.random() - 0.5) * w * 0.5, y: h / 2 + (Math.random() - 0.5) * h * 0.5}
+        ];
+
+        for (let i = 0; i < anchors.length; i++) {
+            for (let j = i + 1; j < anchors.length; j++) {
+                if (Math.random() > 0.4) {
+                    folds.push(generateJaggedPath(anchors[i].x, anchors[i].y, anchors[j].x, anchors[j].y));
+                }
+            }
+        }
+
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        creases.forEach(points => {
-            // 1. Shadow (The valley/crease line)
+        function renderCrease(points, weightMult = 1) {
             ctx.beginPath();
             ctx.moveTo(points[0].x, points[0].y);
             for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-            ctx.strokeStyle = `rgba(0, 0, 0, ${0.05 + Math.random() * 0.12})`;
-            ctx.lineWidth = 0.5 + Math.random() * 1.5;
+            ctx.strokeStyle = `rgba(0, 0, 0, ${0.06 + Math.random() * 0.12})`;
+            ctx.lineWidth = (0.7 + Math.random() * 1.5) * weightMult;
             ctx.stroke();
 
-            // 2. Highlight (The peak catching light right next to the shadow)
             ctx.beginPath();
-            const offsetX = 1 + Math.random();
-            const offsetY = 1 + Math.random();
-            ctx.moveTo(points[0].x + offsetX, points[0].y + offsetY);
-            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x + offsetX, points[i].y + offsetY);
-            ctx.strokeStyle = `rgba(255, 255, 255, ${0.08 + Math.random() * 0.15})`;
-            ctx.lineWidth = 0.5 + Math.random() * 1.2;
-            ctx.stroke();
-        });
-
-        // --- Step 3: Global Micro-Wrinkles (Fractal Noise Pass) ---
-        // We use tiny dots/lines to simulate paper surface grain
-        for (let i = 0; i < 40; i++) {
-            const rx = Math.random() * w;
-            const ry = Math.random() * h;
-            const rlen = 2 + Math.random() * 10;
-            const rang = Math.random() * Math.PI * 2;
-            
-            ctx.beginPath();
-            ctx.moveTo(rx, ry);
-            ctx.lineTo(rx + Math.cos(rang) * rlen, ry + Math.sin(rang) * rlen);
-            ctx.strokeStyle = Math.random() > 0.5 ? `rgba(255, 255, 255, 0.08)` : `rgba(0, 0, 0, 0.05)`;
-            ctx.lineWidth = 0.5;
+            ctx.moveTo(points[0].x - 1.5, points[0].y - 1.5);
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x - 1.5, points[i].y - 1.5);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 + Math.random() * 0.15})`;
+            ctx.lineWidth = (0.5 + Math.random() * 1.2) * weightMult;
             ctx.stroke();
         }
 
-        // --- Step 4: Final Surface Grain (Microscopic Noise) ---
+        folds.forEach(f => renderCrease(f));
+
+        anchors.forEach(a => {
+            const count = 6 + Math.random() * 6;
+            for (let i = 0; i < count; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const len = 15 + Math.random() * 40;
+                renderCrease([a, {x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len}], 0.5);
+            }
+        });
+
         const grainData = ctx.getImageData(0, 0, w, h);
         const d = grainData.data;
         for (let j = 0; j < d.length; j += 4) {
             if (d[j+3] === 0) continue;
-            // Very subtle noise that adds paper "tooth" without changing color
-            const noise = (Math.random() - 0.5) * 8;
+            const noise = (Math.random() - 0.5) * 7;
             d[j] = Math.max(0, Math.min(255, d[j] + noise));
             d[j+1] = Math.max(0, Math.min(255, d[j+1] + noise));
             d[j+2] = Math.max(0, Math.min(255, d[j+2] + noise));
