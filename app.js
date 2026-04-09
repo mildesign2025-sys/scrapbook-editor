@@ -576,84 +576,94 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceCanvasWrapper.remove();
     }
 
-    // --- Kraft Paper Texture Mapping (Flat Print Aesthetic) ---
+    // --- Kraft Paper Realistic Crease Texture (Color Preserving) ---
     function applyKraftEffect(canvas) {
         const ctx = canvas.getContext('2d', { willReadFrequently: true });
         const w = canvas.width;
         const h = canvas.height;
 
-        // 1. Create Substrate (The Kraft Paper Base)
-        const substrate = document.createElement('canvas');
-        substrate.width = w;
-        substrate.height = h;
-        const sCtx = substrate.width > 0 ? substrate.getContext('2d') : null;
-        if (!sCtx) return;
+        // --- Step 1: Procedural Crease Generation ---
+        // We generate a network of random segments that look like paper folds
+        const numCreases = 15 + Math.floor(Math.random() * 10);
+        const creases = [];
 
-        // Base color (Recycled Kraft Tan)
-        sCtx.fillStyle = '#d8b589'; 
-        sCtx.fillRect(0, 0, w, h);
+        for (let i = 0; i < numCreases; i++) {
+            // Random start and end across the canvas
+            let x1 = Math.random() * w;
+            let y1 = Math.random() * h;
+            let angle = Math.random() * Math.PI * 2;
+            let length = w * 0.3 + Math.random() * w * 0.5;
+            
+            // Subdivide the crease to make it slightly jagged/organic
+            const segments = 3 + Math.floor(Math.random() * 4);
+            let currentX = x1;
+            let currentY = y1;
+            const points = [{x: currentX, y: currentY}];
 
-        // Add "Recycled Fibers" and Noise to substrate
-        for (let i = 0; i < (w * h) / 1000; i++) {
-            const fx = Math.random() * w;
-            const fy = Math.random() * h;
-            const flen = 2 + Math.random() * 8;
-            const fang = Math.random() * Math.PI * 2;
-            sCtx.beginPath();
-            sCtx.moveTo(fx, fy);
-            sCtx.lineTo(fx + Math.cos(fang) * flen, fy + Math.sin(fang) * flen);
-            sCtx.strokeStyle = `rgba(80, 50, 20, ${0.05 + Math.random() * 0.1})`;
-            sCtx.lineWidth = 0.5 + Math.random();
-            sCtx.stroke();
+            for (let s = 0; s < segments; s++) {
+                angle += (Math.random() - 0.5) * 0.4; // Slight drift
+                const segLen = length / segments;
+                currentX += Math.cos(angle) * segLen;
+                currentY += Math.sin(angle) * segLen;
+                points.push({x: currentX, y: currentY});
+            }
+            creases.push(points);
         }
 
-        // 2. Prepare "Ink" (The Photo) on a temp canvas
-        const inkCanvas = document.createElement('canvas');
-        inkCanvas.width = w;
-        inkCanvas.height = h;
-        const iCtx = inkCanvas.getContext('2d');
+        // --- Step 2: Render Creases (Shadow & Highlight Pairs) ---
+        // This simulates the peak and valley of a fold, which creates a 3D effect without lights
         
-        // --- Ink Bleed / Dot Gain Effect ---
-        // We draw with a tiny blur to simulate ink soaking into the porous fibers
-        iCtx.filter = 'blur(0.8px) saturate(0.85) contrast(1.1)';
-        iCtx.drawImage(canvas, 0, 0);
-        iCtx.filter = 'none';
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
-        // 3. Printing Process (Blending)
-        // Clear original canvas to apply substrate
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(substrate, 0, 0);
+        creases.forEach(points => {
+            // 1. Shadow (The valley/crease line)
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+            ctx.strokeStyle = `rgba(0, 0, 0, ${0.05 + Math.random() * 0.12})`;
+            ctx.lineWidth = 0.5 + Math.random() * 1.5;
+            ctx.stroke();
 
-        // Core "Printing" blend mode: Multiply sinks the ink into the paper texture
-        ctx.globalAlpha = 0.95; // Slight ink transparency
-        ctx.globalCompositeOperation = 'multiply';
-        ctx.drawImage(inkCanvas, 0, 0);
+            // 2. Highlight (The peak catching light right next to the shadow)
+            ctx.beginPath();
+            const offsetX = 1 + Math.random();
+            const offsetY = 1 + Math.random();
+            ctx.moveTo(points[0].x + offsetX, points[0].y + offsetY);
+            for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x + offsetX, points[i].y + offsetY);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.08 + Math.random() * 0.15})`;
+            ctx.lineWidth = 0.5 + Math.random() * 1.2;
+            ctx.stroke();
+        });
 
-        // Restore default composite
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1.0;
+        // --- Step 3: Global Micro-Wrinkles (Fractal Noise Pass) ---
+        // We use tiny dots/lines to simulate paper surface grain
+        for (let i = 0; i < 40; i++) {
+            const rx = Math.random() * w;
+            const ry = Math.random() * h;
+            const rlen = 2 + Math.random() * 10;
+            const rang = Math.random() * Math.PI * 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(rx, ry);
+            ctx.lineTo(rx + Math.cos(rang) * rlen, ry + Math.sin(rang) * rlen);
+            ctx.strokeStyle = Math.random() > 0.5 ? `rgba(255, 255, 255, 0.08)` : `rgba(0, 0, 0, 0.05)`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+        }
 
-        // 4. Final Surface Grain (Microscopic ink/paper noise)
+        // --- Step 4: Final Surface Grain (Microscopic Noise) ---
         const grainData = ctx.getImageData(0, 0, w, h);
         const d = grainData.data;
         for (let j = 0; j < d.length; j += 4) {
             if (d[j+3] === 0) continue;
-            const g = (Math.random() - 0.5) * 15;
-            d[j] = Math.max(0, Math.min(255, d[j] + g));
-            d[j+1] = Math.max(0, Math.min(255, d[j+1] + g));
-            d[j+2] = Math.max(0, Math.min(255, d[j+2] + g));
+            // Very subtle noise that adds paper "tooth" without changing color
+            const noise = (Math.random() - 0.5) * 8;
+            d[j] = Math.max(0, Math.min(255, d[j] + noise));
+            d[j+1] = Math.max(0, Math.min(255, d[j+1] + noise));
+            d[j+2] = Math.max(0, Math.min(255, d[j+2] + noise));
         }
         ctx.putImageData(grainData, 0, 0);
-
-        // Substrate detail: Subtle spots (pulp chunks)
-        for (let k = 0; k < 15; k++) {
-            const sx = Math.random() * w;
-            const sy = Math.random() * h;
-            ctx.beginPath();
-            ctx.arc(sx, sy, 0.5 + Math.random() * 1.5, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(60, 40, 10, ${0.1 + Math.random() * 0.1})`;
-            ctx.fill();
-        }
     }
     // Wire up Kraft Button
     kraftBtn.addEventListener('click', () => {
