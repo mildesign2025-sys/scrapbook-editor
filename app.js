@@ -84,29 +84,25 @@ document.addEventListener('DOMContentLoaded', () => {
     let isUndoing = false;
     let clipboardData = null;
 
-    let saveTimeout = null;
     function saveState() {
         if (isUndoing) return;
-        if (saveTimeout) clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(() => {
-            try {
-                const snapshot = Array.from(tornPiecesContainer.children).map(node => {
-                    const stateFn = node._scrapbookState;
-                    if (!stateFn) return null;
-                    const s = stateFn.get();
-                    const newCanvas = document.createElement('canvas');
-                    newCanvas.width = s.canvas.width;
-                    newCanvas.height = s.canvas.height;
-                    newCanvas.getContext('2d').drawImage(s.canvas, 0, 0);
-                    return { ...s, canvas: newCanvas };
-                }).filter(Boolean);
-                
-                historyStack.push(snapshot);
-                if (historyStack.length > 30) historyStack.shift();
-            } catch (err) {
-                console.error("Save state error:", err);
-            }
-        }, 200); // 200ms debounce to safely group multi-file uploads into one single history step
+        try {
+            const snapshot = Array.from(tornPiecesContainer.children).map(node => {
+                const stateFn = node._scrapbookState;
+                if (!stateFn) return null;
+                const s = stateFn.get();
+                const newCanvas = document.createElement('canvas');
+                newCanvas.width = s.canvas.width;
+                newCanvas.height = s.canvas.height;
+                newCanvas.getContext('2d').drawImage(s.canvas, 0, 0);
+                return { ...s, canvas: newCanvas };
+            }).filter(Boolean);
+            
+            historyStack.push(snapshot);
+            if (historyStack.length > 30) historyStack.shift();
+        } catch (err) {
+            console.error("Save state error:", err);
+        }
     }
 
     function doUndo() {
