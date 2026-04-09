@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeDeleteBtn = document.getElementById('modeDelete');
-    const kraftBtn = document.getElementById('kraftBtn');
+
     let currentMode = 'tear'; // 'tear', 'punch', 'drag', or 'delete'
     document.body.classList.add('mode-tear');
 
@@ -576,149 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceCanvasWrapper.remove();
     }
 
-    // --- Kraft Paper Mesh-Warped Crumple Effect (Structural & Color Preserving) ---
-    function applyKraftEffect(canvas, wrapper) {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        const w = canvas.width;
-        const h = canvas.height;
 
-        // Save original image to a buffer
-        const buffer = document.createElement('canvas');
-        buffer.width = w;
-        buffer.height = h;
-        buffer.getContext('2d').drawImage(canvas, 0, 0);
-
-        // --- Step 1: Mesh Generation ---
-        const rows = 6, cols = 6;
-        const mesh = [];
-        for (let y = 0; y <= rows; y++) {
-            for (let x = 0; x <= cols; x++) {
-                mesh.push({
-                    u: x / cols, v: y / rows, 
-                    x: (x / cols) * w, y: (y / rows) * h 
-                });
-            }
-        }
-
-        // --- Step 2: Mesh Distortion (Large Folds) ---
-        // Pick 2-3 large "fold lines" that warp the geometry
-        const numFolds = 2 + Math.floor(Math.random() * 2);
-        const foldLines = [];
-        for (let i = 0; i < numFolds; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const cx = w * Math.random(), cy = h * Math.random();
-            foldLines.push({ cx, cy, nx: Math.cos(angle), ny: Math.sin(angle), strength: 18 + Math.random() * 22 });
-        }
-
-        mesh.forEach(p => {
-            foldLines.forEach(line => {
-                const dx = p.x - line.cx;
-                const dy = p.y - line.cy;
-                const dist = dx * line.nx + dy * line.ny;
-                // Displacement based on proximity to fold line
-                const disp = Math.exp(-Math.abs(dist) / 75) * line.strength;
-                p.x += line.nx * disp;
-                p.y += line.ny * disp;
-            });
-            // Small global jitter
-            p.x += (Math.random() - 0.5) * 8;
-            p.y += (Math.random() - 0.5) * 8;
-        });
-
-        // --- Step 3: Triangle Transformation & Rendering ---
-        ctx.clearRect(0, 0, w, h);
-        
-        function drawTriangle(s1, s2, s3, d1, d2, d3) {
-            ctx.save();
-            ctx.beginPath();
-            ctx.moveTo(d1.x, d1.y);
-            ctx.lineTo(d2.x, d2.y);
-            ctx.lineTo(d3.x, d3.y);
-            ctx.closePath();
-            ctx.clip();
-
-            // Calculate affine transform matrix for mapping triangle
-            const x1 = s1.x, y1 = s1.y, x2 = s2.x, y2 = s2.y, x3 = s3.x, y3 = s3.y;
-            const u1 = d1.x, v1 = d1.y, u2 = d2.x, v2 = d2.y, u3 = d3.x, v3 = d3.y;
-            const denom = x1 * (y2 - y3) - y1 * (x2 - x3) + (x2 * y3 - y2 * x3);
-            if (Math.abs(denom) < 0.1) { ctx.restore(); return; }
-
-            const m11 = (u1 * (y2 - y3) + u2 * (y3 - y1) + u3 * (y1 - y2)) / denom;
-            const m12 = (v1 * (y2 - y3) + v2 * (y3 - y1) + v3 * (y1 - y2)) / denom;
-            const m21 = (u1 * (x3 - x2) + u2 * (x1 - x3) + u3 * (x2 - x1)) / denom;
-            const m22 = (v1 * (x3 - x2) + v2 * (x1 - x3) + v3 * (x2 - x1)) / denom;
-            const dx = (u1 * (x2 * y3 - x3 * y2) + u2 * (x3 * y1 - x1 * y3) + u3 * (x1 * y2 - x2 * y1)) / denom;
-            const dy = (v1 * (x2 * y3 - x3 * y2) + v2 * (x3 * y1 - x1 * y3) + v3 * (x1 * y2 - x2 * y1)) / denom;
-
-            ctx.setTransform(m11, m12, m21, m22, dx, dy);
-            ctx.drawImage(buffer, 0, 0);
-            ctx.restore();
-        }
-
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                const i1 = y * (cols + 1) + x;
-                const i2 = i1 + 1;
-                const i3 = (y + 1) * (cols + 1) + x;
-                const i4 = i3 + 1;
-                const s1 = {x: (x/cols)*w, y: (y/rows)*h}, s2 = {x: ((x+1)/cols)*w, y: (y/rows)*h};
-                const s3 = {x: (x/cols)*w, y: ((y+1)/rows)*h}, s4 = {x: ((x+1)/cols)*w, y: ((y+1)/rows)*h};
-                drawTriangle(s1, s2, s3, mesh[i1], mesh[i2], mesh[i3]);
-                drawTriangle(s2, s4, mesh[i4], mesh[i2], mesh[i4], mesh[i3]);
-            }
-        }
-
-        // --- Step 4: Structural Creases at Fold Peaks ---
-        ctx.setTransform(1, 0, 0, 1, 0, 0); 
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        foldLines.forEach(line => {
-             const startX = line.cx - line.ny * (w+h), startY = line.cy + line.nx * (w+h);
-             const endX = line.cx + line.ny * (w+h), endY = line.cy - line.nx * (w+h);
-             ctx.beginPath();
-             ctx.moveTo(startX, startY);
-             ctx.lineTo(endX, endY);
-             ctx.strokeStyle = "rgba(0,0,0,0.15)";
-             ctx.lineWidth = 2.0;
-             ctx.stroke();
-             ctx.beginPath();
-             ctx.moveTo(startX - 1, startY - 1);
-             ctx.lineTo(endX - 1, endY - 1);
-             ctx.strokeStyle = "rgba(255,255,255,0.2)";
-             ctx.lineWidth = 1.0;
-             ctx.stroke();
-        });
-
-        // --- Step 5: Update the Silhouette (Clip-Path) ---
-        if (wrapper && wrapper._scrapbookState) {
-            const state = wrapper._scrapbookState.get();
-            if (state.clipPath) {
-                const points = state.clipPath.match(/[\d.-]+px [\d.-]+px/g);
-                if (points) {
-                    const newPathPoints = points.map(p => {
-                        const [px, py] = p.split(" ").map(v => parseFloat(v));
-                        const ux = px / w, uy = py / h;
-                        const col = Math.max(0, Math.min(cols-1, Math.floor(ux * cols)));
-                        const row = Math.max(0, Math.min(rows-1, Math.floor(uy * rows)));
-                        const fracX = (ux * cols) - col, fracY = (uy * rows) - row;
-                        const i1 = row * (cols + 1) + col, i2 = i1 + 1, i3 = (row + 1) * (cols + 1) + col, i4 = i3 + 1;
-                        const m1 = mesh[i1], m2 = mesh[i2], m3 = mesh[i3], m4 = mesh[i4];
-                        const nx = m1.x * (1-fracX)*(1-fracY) + m2.x * fracX*(1-fracY) + m3.x * (1-fracX)*fracY + m4.x * fracX*fracY;
-                        const ny = m1.y * (1-fracX)*(1-fracY) + m2.y * fracX*(1-fracY) + m3.y * (1-fracX)*fracY + m4.y * fracX*fracY;
-                        return `${nx.toFixed(1)}px ${ny.toFixed(1)}px`;
-                    });
-                    wrapper.style.clipPath = `polygon(${newPathPoints.join(", ")})`;
-                }
-            }
-        }
-    }
-    // Wire up Kraft Button
-    kraftBtn.addEventListener('click', () => {
-        if (!activePiece) return;
-        const canvasEl = activePiece.querySelector('canvas');
-        if (!canvasEl) return;
-        applyKraftEffect(canvasEl, activePiece);
-    });
 
     // --- Component Logic ---
     function createDraggableTornPiece(canvas, x, y, rotation, clipPath = null, currentScale = 1, initialOpacity = 1) {
