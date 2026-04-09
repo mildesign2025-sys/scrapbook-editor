@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>
+    async function runTest() {
+        // mock the upload of two files
+        const dt = new DataTransfer();
+        dt.items.add(new File(["11111"], "a.png", {type: "image/png"}));
+        dt.items.add(new File(["22222"], "b.png", {type: "image/png"}));
+        document.getElementById('imageInput').files = dt.files;
+        document.getElementById('imageInput').dispatchEvent(new Event('change'));
+    }
+</script>
+</head>
+<body>
+    <input type="file" id="imageInput" multiple>
+</body>
+</html>

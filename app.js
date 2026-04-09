@@ -49,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const files = Array.from(e.target.files).filter(file => file.type.startsWith('image/'));
             if (files.length > 0) {
                 await Promise.all(files.map(file => loadImagePromise(file)));
-                requestAnimationFrame(() => setTimeout(saveState, 50));
             }
         }
         e.target.value = ''; // Reset for re-uploading same file
@@ -74,92 +73,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
             if (files.length > 0) {
                 await Promise.all(files.map(file => loadImagePromise(file)));
-                requestAnimationFrame(() => setTimeout(saveState, 50));
             }
         }
     });
 
-    // History state for hidden Undo shortcut
-    let historyStack = [[]]; // Initialize with empty state so we can undo back to zero
-    let redoStack = [];
-    let isUndoing = false;
+    // Copy/Paste state
     let clipboardData = null;
-
-    function saveState() {
-        if (isUndoing) return;
-        try {
-            const snapshot = Array.from(tornPiecesContainer.children).map(node => {
-                const stateFn = node._scrapbookState;
-                if (!stateFn) return null;
-                const s = stateFn.get();
-                // Deep clone non-canvas properties using structuredClone
-                const metadata = structuredClone({
-                    x: s.x,
-                    y: s.y,
-                    rotation: s.rotation,
-                    currentScale: s.currentScale,
-                    opacity: s.opacity,
-                    clipPath: s.clipPath,
-                    zIndex: s.zIndex
-                });
-                const newCanvas = document.createElement('canvas');
-                newCanvas.width = s.canvas.width;
-                newCanvas.height = s.canvas.height;
-                newCanvas.getContext('2d').drawImage(s.canvas, 0, 0);
-                return { ...metadata, canvas: newCanvas };
-            }).filter(Boolean);
-            
-            historyStack.push(snapshot);
-            if (historyStack.length > 50) historyStack.shift();
-            redoStack = []; // Clear redo stack on new action
-        } catch (err) {
-            console.error("Save state error:", err);
-        }
-    }
-
-    function _restoreSnapshot(snapshot) {
-        tornPiecesContainer.innerHTML = '';
-        activePiece = null;
-        for (const meta of snapshot) {
-            const unmutatedCanvas = document.createElement('canvas');
-            unmutatedCanvas.width = meta.canvas.width;
-            unmutatedCanvas.height = meta.canvas.height;
-            unmutatedCanvas.getContext('2d').drawImage(meta.canvas, 0, 0);
-            const newPiece = createDraggableTornPiece(unmutatedCanvas, meta.x, meta.y, meta.rotation, meta.clipPath, meta.currentScale, meta.opacity !== undefined ? meta.opacity : 1);
-            newPiece.style.zIndex = meta.zIndex;
-        }
-    }
-
-    function doUndo() {
-        if (historyStack.length <= 1) return; 
-        isUndoing = true;
-        
-        const currentState = historyStack.pop(); 
-        redoStack.push(currentState);
-        
-        const lastState = historyStack[historyStack.length - 1]; 
-        _restoreSnapshot(lastState);
-        
-        isUndoing = false;
-    }
-
-    function doRedo() {
-        if (redoStack.length === 0) return;
-        isUndoing = true;
-        
-        const nextState = redoStack.pop();
-        historyStack.push(nextState);
-        _restoreSnapshot(nextState);
-        
-        isUndoing = false;
-    }
 
     resetBtn.addEventListener('click', () => {
         tornPiecesContainer.innerHTML = '';
         uiContainer.classList.remove('hidden');
         dropzone.classList.remove('hidden'); 
         toolbar.classList.add('hidden');
-        saveState();
     });
 
     function loadImagePromise(file) {
@@ -458,7 +383,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 createDraggableTornPiece(holeCanvas, exactLeft, exactTop, rot, null, scale);
                 
                 sourceCanvasWrapper.remove();
-                saveState();
                 return;
             }
         }
@@ -649,7 +573,6 @@ document.addEventListener('DOMContentLoaded', () => {
         createPieceFromPoly(poly2, false);
 
         sourceCanvasWrapper.remove();
-        saveState();
     }
 
     // --- Component Logic ---
@@ -728,7 +651,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentMode === 'delete') {
                 wrapper.remove();
                 activePiece = null;
-                saveState();
                 return;
             }
             
@@ -852,7 +774,7 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper.releasePointerCapture(e.pointerId);
             
             if (currentMode === 'drag') {
-                saveState(); // Capture drag finish in history stack
+                // Drag complete
             } else if (currentMode === 'tear') {
                 if(drawOverlay) {
                     drawOverlay.remove();
@@ -882,24 +804,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let isKeyTransforming = false;
     window.addEventListener('keydown', (e) => {
         if (!uiContainer.classList.contains('hidden')) return; // Strictly only allow shortcuts inside editor mode
-
-        if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
-            e.preventDefault();
-            if (e.repeat) return; // Prevent rapid continuous firing
-            if (e.shiftKey) {
-                doRedo();
-            } else {
-                doUndo();
-            }
-            return;
-        }
-
-        if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) {
-            e.preventDefault();
-            if (e.repeat) return;
-            doRedo();
-            return;
-        }
 
         if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
             if (!activePiece) return;
@@ -933,7 +837,6 @@ document.addEventListener('DOMContentLoaded', () => {
             activePiece = newPiece;
             clipboardData.x = newX;
             clipboardData.y = newY;
-            saveState();
             return;
         }
 
@@ -945,23 +848,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activePiece._updateOpacity && activePiece.style.opacity !== op.toString()) {
                 e.preventDefault();
                 activePiece._updateOpacity(op);
-                saveState();
             }
             return;
         }
-
+    
         let currentZ = parseInt(activePiece.style.zIndex) || 10;
 
         if (e.key === 'Backspace' || e.key === 'Delete') {
             activePiece.remove();
             activePiece = null;
-            saveState();
         } else if (e.key === ']') {
             activePiece.style.zIndex = currentZ + 1;
-            saveState();
         } else if (e.key === '[') {
             activePiece.style.zIndex = currentZ - 1;
-            saveState();
         } else if (e.key === 'ArrowLeft' || e.key === 'q' || e.key === 'Q') {
             e.preventDefault();
             if (activePiece._updateTransforms) { activePiece._updateTransforms(-5, 1); isKeyTransforming = true; }
@@ -980,7 +879,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('keyup', (e) => {
         if (isKeyTransforming) {
             isKeyTransforming = false;
-            saveState(); // Commit the continuous transformation sequence
         }
     });
 
