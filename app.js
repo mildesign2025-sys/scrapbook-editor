@@ -81,6 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // History state for hidden Undo shortcut
     let historyStack = [[]]; // Initialize with empty state so we can undo back to zero
+    let redoStack = [];
     let isUndoing = false;
     let clipboardData = null;
 
@@ -91,44 +92,64 @@ document.addEventListener('DOMContentLoaded', () => {
                 const stateFn = node._scrapbookState;
                 if (!stateFn) return null;
                 const s = stateFn.get();
+                // Deep clone non-canvas properties using structuredClone
+                const metadata = structuredClone({
+                    x: s.x,
+                    y: s.y,
+                    rotation: s.rotation,
+                    currentScale: s.currentScale,
+                    opacity: s.opacity,
+                    clipPath: s.clipPath,
+                    zIndex: s.zIndex
+                });
                 const newCanvas = document.createElement('canvas');
                 newCanvas.width = s.canvas.width;
                 newCanvas.height = s.canvas.height;
                 newCanvas.getContext('2d').drawImage(s.canvas, 0, 0);
-                return { ...s, canvas: newCanvas };
+                return { ...metadata, canvas: newCanvas };
             }).filter(Boolean);
             
             historyStack.push(snapshot);
-            if (historyStack.length > 30) historyStack.shift();
+            if (historyStack.length > 50) historyStack.shift();
+            redoStack = []; // Clear redo stack on new action
         } catch (err) {
             console.error("Save state error:", err);
+        }
+    }
+
+    function _restoreSnapshot(snapshot) {
+        tornPiecesContainer.innerHTML = '';
+        activePiece = null;
+        for (const meta of snapshot) {
+            const unmutatedCanvas = document.createElement('canvas');
+            unmutatedCanvas.width = meta.canvas.width;
+            unmutatedCanvas.height = meta.canvas.height;
+            unmutatedCanvas.getContext('2d').drawImage(meta.canvas, 0, 0);
+            const newPiece = createDraggableTornPiece(unmutatedCanvas, meta.x, meta.y, meta.rotation, meta.clipPath, meta.currentScale, meta.opacity !== undefined ? meta.opacity : 1);
+            newPiece.style.zIndex = meta.zIndex;
         }
     }
 
     function doUndo() {
         if (historyStack.length <= 1) return; 
         isUndoing = true;
-        historyStack.pop(); 
+        
+        const currentState = historyStack.pop(); 
+        redoStack.push(currentState);
+        
         const lastState = historyStack[historyStack.length - 1]; 
+        _restoreSnapshot(lastState);
         
-        tornPiecesContainer.innerHTML = '';
-        activePiece = null;
+        isUndoing = false;
+    }
+
+    function doRedo() {
+        if (redoStack.length === 0) return;
+        isUndoing = true;
         
-        for (const s of lastState) {
-            const unmutatedCanvas = document.createElement('canvas');
-            unmutatedCanvas.width = s.canvas.width;
-            unmutatedCanvas.height = s.canvas.height;
-            unmutatedCanvas.getContext('2d').drawImage(s.canvas, 0, 0);
-            
-            const newPiece = createDraggableTornPiece(unmutatedCanvas, s.x, s.y, s.rotation, s.clipPath, s.currentScale, s.opacity !== undefined ? s.opacity : 1);
-            newPiece.style.zIndex = s.zIndex;
-        }
-        
-        if (lastState.length === 0) {
-            uiContainer.classList.remove('hidden');
-            dropzone.classList.remove('hidden'); 
-            toolbar.classList.add('hidden');
-        }
+        const nextState = redoStack.pop();
+        historyStack.push(nextState);
+        _restoreSnapshot(nextState);
         
         isUndoing = false;
     }
@@ -628,6 +649,7 @@ document.addEventListener('DOMContentLoaded', () => {
         createPieceFromPoly(poly2, false);
 
         sourceCanvasWrapper.remove();
+        saveState();
     }
 
     // --- Component Logic ---
@@ -859,10 +881,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isKeyTransforming = false;
     window.addEventListener('keydown', (e) => {
+        if (!uiContainer.classList.contains('hidden')) return; // Strictly only allow shortcuts inside editor mode
+
         if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) {
             e.preventDefault();
-            if (e.repeat) return; // Prevent holding down key from shooting back 10 steps at once
-            doUndo();
+            if (e.repeat) return; // Prevent rapid continuous firing
+            if (e.shiftKey) {
+                doRedo();
+            } else {
+                doUndo();
+            }
+            return;
+        }
+
+        if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || e.key === 'Y')) {
+            e.preventDefault();
+            if (e.repeat) return;
+            doRedo();
             return;
         }
 
@@ -923,8 +958,10 @@ document.addEventListener('DOMContentLoaded', () => {
             saveState();
         } else if (e.key === ']') {
             activePiece.style.zIndex = currentZ + 1;
+            saveState();
         } else if (e.key === '[') {
             activePiece.style.zIndex = currentZ - 1;
+            saveState();
         } else if (e.key === 'ArrowLeft' || e.key === 'q' || e.key === 'Q') {
             e.preventDefault();
             if (activePiece._updateTransforms) { activePiece._updateTransforms(-5, 1); isKeyTransforming = true; }
