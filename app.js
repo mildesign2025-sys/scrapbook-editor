@@ -14,10 +14,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchSizeSlider = document.getElementById('punchSize');
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
+    const modeFrostBtn = document.getElementById('modeFrost');
     const modeDeleteBtn = document.getElementById('modeDelete');
     const toolbar = document.getElementById('toolbar');
 
-    let currentMode = 'tear'; // 'tear', 'punch', 'drag', or 'delete'
+    let currentMode = 'tear'; // 'tear', 'punch', 'drag', 'frost', or 'delete'
     document.body.classList.add('mode-tear');
 
     function updateMode(newMode) {
@@ -25,17 +26,24 @@ document.addEventListener('DOMContentLoaded', () => {
         modeTearBtn.classList.toggle('active', newMode === 'tear');
         modePunchBtn.classList.toggle('active', newMode === 'punch');
         modeDragBtn.classList.toggle('active', newMode === 'drag');
+        modeFrostBtn.classList.toggle('active', newMode === 'frost');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
         punchControl.classList.toggle('hidden', newMode !== 'punch');
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
 
-        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-delete');
+        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-delete');
         document.body.classList.add(`mode-${newMode}`);
+        
+        // When entering frost mode, trigger the frosted glass generation on the currently active piece
+        if (newMode === 'frost' && activePiece && activePiece._sourceBuffer && !activePiece._frostedBuffer) {
+            applyFrostEffect(activePiece);
+        }
     }
 
     modeTearBtn.addEventListener('click', () => updateMode('tear'));
     modePunchBtn.addEventListener('click', () => updateMode('punch'));
     modeDragBtn.addEventListener('click', () => updateMode('drag'));
+    modeFrostBtn.addEventListener('click', () => updateMode('frost'));
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
 
     function updatePunchPreviewSize() {
@@ -581,6 +589,108 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+    // --- Frost Wipe Effect with Physics Droplets ---
+    function applyFrostEffect(wrapper) {
+        if (!wrapper || wrapper._frostedBuffer) return;
+        const sourceCanvas = wrapper.querySelector('canvas');
+        if (!sourceCanvas || sourceCanvas.classList.contains('frost-overlay')) return;
+        
+        const w = sourceCanvas.width;
+        const h = sourceCanvas.height;
+
+        if (!wrapper._sourceBuffer) {
+            const buffer = document.createElement('canvas');
+            buffer.width = w; buffer.height = h;
+            buffer.getContext('2d', {willReadFrequently:true}).drawImage(sourceCanvas, 0, 0);
+            wrapper._sourceBuffer = buffer;
+        }
+
+        const frostCanvas = document.createElement('canvas');
+        frostCanvas.width = w; frostCanvas.height = h;
+        frostCanvas.className = 'frost-overlay';
+        frostCanvas.style.position = 'absolute';
+        frostCanvas.style.top = '0';
+        frostCanvas.style.left = '0';
+        frostCanvas.style.pointerEvents = 'none';
+        frostCanvas.style.zIndex = '5'; // Render above the sharp image
+        
+        const fctx = frostCanvas.getContext('2d', { willReadFrequently: true });
+        
+        // Create solid frosted layer (heavy blur + tint overlay)
+        fctx.filter = 'blur(12px)';
+        fctx.drawImage(wrapper._sourceBuffer, 0, 0);
+        fctx.filter = 'none';
+        
+        fctx.globalCompositeOperation = 'source-over';
+        fctx.fillStyle = 'rgba(230, 240, 255, 0.4)'; // Icy condensation fog
+        fctx.fillRect(0, 0, w, h);
+
+        wrapper.appendChild(frostCanvas);
+        wrapper._frostedBuffer = frostCanvas;
+        wrapper._droplets = []; 
+        
+        if (!wrapper._physicsLoop) {
+            wrapper._physicsLoop = true;
+            runDropletPhysics(wrapper);
+        }
+    }
+
+    function runDropletPhysics(wrapper) {
+        if (!wrapper._frostedBuffer || !wrapper._physicsLoop) return;
+        const fctx = wrapper._frostedBuffer.getContext('2d');
+        const droplets = wrapper._droplets;
+        const h = wrapper._frostedBuffer.height;
+        
+        if (droplets.length > 0) {
+            for(let i = droplets.length - 1; i >= 0; i--) {
+                const drop = droplets[i];
+                
+                drop.speed += 0.05; // gravity pulls the droplet down
+                if (drop.speed > 4.0) drop.speed = 4.0;
+                
+                const prevY = drop.y;
+                drop.y += drop.speed;
+                drop.mass -= 0.02; // Slowly evaporates as it deposits its trail
+                
+                if (drop.mass <= 0 || drop.y > h + drop.mass) {
+                    droplets.splice(i, 1);
+                    continue;
+                }
+
+                const r = drop.mass; 
+                
+                // 1. Core Physics interaction: The falling drop ERASES frost (destination-out) behind it
+                fctx.globalCompositeOperation = 'destination-out';
+                fctx.lineCap = 'round';
+                fctx.lineJoin = 'round';
+                fctx.lineWidth = r * 2;
+                fctx.beginPath();
+                fctx.moveTo(drop.x, prevY - r*0.5); 
+                fctx.lineTo(drop.x, drop.y);
+                fctx.stroke();
+
+                // 2. Draw actual physical water bead falling downwards
+                // Utilizing source-over here creates an incredible effect because next frame's 
+                // destination-out trace will physically erase the trailing edge of this bead!
+                fctx.globalCompositeOperation = 'source-over';
+                
+                // Dark bottom refractive edge of the bubble
+                fctx.fillStyle = 'rgba(0,0,0,0.3)';
+                fctx.beginPath();
+                fctx.arc(drop.x, drop.y, r, 0, Math.PI*2);
+                fctx.fill();
+                
+                // Bright specular lighting on top
+                fctx.fillStyle = 'rgba(255,255,255,0.85)';
+                fctx.beginPath();
+                fctx.arc(drop.x, drop.y - r*0.3, r*0.6, 0, Math.PI*2);
+                fctx.fill();
+            }
+        }
+        
+        requestAnimationFrame(() => runDropletPhysics(wrapper));
+    }
+
     // --- Component Logic ---
     function createDraggableTornPiece(canvas, x, y, rotation, clipPath = null, currentScale = 1, initialOpacity = 1) {
         const wrapper = document.createElement('div');
@@ -720,8 +830,60 @@ document.addEventListener('DOMContentLoaded', () => {
                 wrapper.appendChild(drawOverlay);
                 
                 addTearPoint(e);
+            } else if (currentMode === 'frost') {
+                if (!wrapper._frostedBuffer) {
+                    applyFrostEffect(wrapper);
+                }
+                wrapper._lastWipe = null;
+                wipePoint(e);
             }
         });
+
+        const wipePoint = (e) => {
+            if (!wrapper._frostedBuffer) return;
+            const left = parseFloat(wrapper.style.left) || 0;
+            const top = parseFloat(wrapper.style.top) || 0;
+            
+            const dx = e.clientX - left;
+            const dy = e.clientY - top;
+            
+            const rotRad = -rotation * Math.PI / 180;
+            const unrotatedDx = dx * Math.cos(rotRad) - dy * Math.sin(rotRad);
+            const unrotatedDy = dx * Math.sin(rotRad) + dy * Math.cos(rotRad);
+            
+            const localX = unrotatedDx / localScale;
+            const localY = unrotatedDy / localScale;
+
+            const fctx = wrapper._frostedBuffer.getContext('2d');
+            
+            // "Wiping" is physically cutting out the frosted layer to reveal the sharp image
+            fctx.globalCompositeOperation = 'destination-out';
+            fctx.lineCap = 'round';
+            fctx.lineJoin = 'round';
+            fctx.lineWidth = 45; // Broad finger stroke width
+
+            if (wrapper._lastWipe) {
+                fctx.beginPath();
+                fctx.moveTo(wrapper._lastWipe.x, wrapper._lastWipe.y);
+                fctx.lineTo(localX, localY);
+                fctx.stroke();
+            } else {
+                fctx.beginPath();
+                fctx.arc(localX, localY, 22.5, 0, Math.PI * 2);
+                fctx.fill();
+            }
+            wrapper._lastWipe = { x: localX, y: localY };
+
+            // 15% chance per move to spawn a heavy moisture droplet at the edge of the wipe
+            if (Math.random() < 0.15) { 
+                wrapper._droplets.push({
+                    x: localX + (Math.random() - 0.5) * 40,
+                    y: localY,
+                    mass: 3 + Math.random() * 5, 
+                    speed: 0
+                });
+            }
+        };
 
         const addTearPoint = (e) => {
             const left = parseFloat(wrapper.style.left) || 0;
@@ -771,6 +933,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     drawCtx.setLineDash([4, 4]);
                     drawCtx.stroke();
                 }
+            } else if (currentMode === 'frost') {
+                wipePoint(e);
             }
         });
 
@@ -800,6 +964,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 }
+            } else if (currentMode === 'frost') {
+                wrapper._lastWipe = null;
             }
         });
     }
