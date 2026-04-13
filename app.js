@@ -599,10 +599,10 @@ document.addEventListener('DOMContentLoaded', () => {
         // 1. Initialize or Load Mesh State
         // A vertex is {x, y, ux, uy}. Facets are arrays of vertex references.
         if (!wrapper._mesh) {
-            const v1 = {x: 0, y: 0, ux: 0, uy: 0};
-            const v2 = {x: w, y: 0, ux: w, uy: 0};
-            const v3 = {x: w, y: h, ux: w, uy: h};
-            const v4 = {x: 0, y: h, ux: 0, uy: h};
+            const v1 = {x: 0, y: 0, z: 0, ux: 0, uy: 0};
+            const v2 = {x: w, y: 0, z: 0, ux: w, uy: 0};
+            const v3 = {x: w, y: h, z: 0, ux: w, uy: h};
+            const v4 = {x: 0, y: h, z: 0, ux: 0, uy: h};
             wrapper._mesh = {
                 vertices: [v1, v2, v3, v4],
                 facets: [[v1, v2, v3, v4]]
@@ -646,6 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             intersect = {
                                 x: v1.x + t * (v2.x - v1.x),
                                 y: v1.y + t * (v2.y - v1.y),
+                                z: v1.z + t * (v2.z - v1.z),
                                 ux: iux, 
                                 uy: iuy
                             };
@@ -662,12 +663,14 @@ document.addEventListener('DOMContentLoaded', () => {
             mesh.vertices = newVertices;
         }
 
-        // 3. Collective Vertex Displacement (Ensures no tears)
+        // 3. Collective Vertex Displacement (3D Z-axis)
         mesh.vertices.forEach(v => {
-            // Apply a small "crumple" jitter synchronously across all facets sharing this vertex
-            const jitter = 5 + Math.random() * 3;
-            v.x += (Math.random() - 0.5) * jitter;
-            v.y += (Math.random() - 0.5) * jitter;
+            const isEdge = v.ux < 1 || v.ux > w - 1 || v.uy < 1 || v.uy > h - 1;
+            const jitterXY = isEdge ? 1 : (5 + Math.random() * 3);
+            const jitterZ = isEdge ? 2 : (10 + Math.random() * 15);
+            v.x += (Math.random() - 0.5) * jitterXY;
+            v.y += (Math.random() - 0.5) * jitterXY;
+            v.z += (Math.random() - 0.5) * jitterZ;
         });
 
         // 4. Rendering
@@ -703,15 +706,37 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.drawImage(source, 0, 0);
             ctx.restore();
             
-            // Neutral structural shading
+            // Directional 3D Shading
+            const vx1 = p2.x - p1.x, vy1 = p2.y - p1.y, vz1 = p2.z - p1.z;
+            const vx2 = p3.x - p1.x, vy2 = p3.y - p1.y, vz2 = p3.z - p1.z;
+            
+            // Cross product to get facet normal
+            let nx = vy1 * vz2 - vz1 * vy2;
+            let ny = vz1 * vx2 - vx1 * vz2;
+            let nz = vx1 * vy2 - vy1 * vx2;
+            
+            const nlen = Math.hypot(nx, ny, nz) || 1;
+            nx /= nlen; ny /= nlen; nz /= nlen;
+            if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; } // Point towards viewer
+
+            // Light from top-left (fixed light vector TO the light source)
+            const lx = -0.5, ly = -0.7, lz = 0.5; 
+            const dot = (nx * lx + ny * ly + nz * lz);
+            
             ctx.setTransform(1, 0, 0, 1, 0, 0);
-            const shade = (Math.random() - 0.5) * 0.15;
-            ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,0,${-shade})`;
+            const intensity = dot * 0.45; // scale the light intensity
+            
+            ctx.fillStyle = intensity > 0 ? `rgba(255,255,255,${intensity})` : `rgba(0,0,0,${-intensity})`;
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
             ctx.lineTo(p3.x, p3.y);
             ctx.fill();
+
+            // Structural edge crease (Ambient Occlusion effect)
+            ctx.strokeStyle = `rgba(0, 0, 0, ${Math.abs(dot) * 0.15 + 0.05})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
         }
 
         mesh.facets.forEach(points => {
