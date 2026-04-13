@@ -581,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-    // --- High-Fidelity Procedural Grid Crumple Effect (Phase 1.3) ---
+    // --- Sparse Delaunay Low-Poly Geometry Crumple (Phase 1.5 - Final Math) ---
     function applyCrumpleEffect(wrapper) {
         if (!wrapper) return;
         const canvas = wrapper.querySelector('canvas');
@@ -596,105 +596,123 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper._sourceBuffer = buffer;
         }
 
-        const cols = 30; // High resolution for organic folds
-        const rows = 30;
+        // Tiny native Delaunay Bowyer-Watson implementation
+        function triangulate(vertices) {
+            let minX = 0, minY = 0, maxX = w, maxY = h;
+            const dx = maxX - minX, dy = maxY - minY;
+            const deltaMax = Math.max(dx, dy);
+            const midx = w / 2, midy = h / 2;
 
-        // 1. Initialize Grid Mesh State
-        if (!wrapper._mesh) {
-            wrapper._mesh = {
-                vertices: [],
-                stressWaves: []
-            };
-            for (let y = 0; y <= rows; y++) {
-                for (let x = 0; x <= cols; x++) {
-                    const ux = (x / cols) * w;
-                    const uy = (y / rows) * h;
-                    wrapper._mesh.vertices.push({ x: ux, y: uy, z: 0, ux: ux, uy: uy });
-                }
+            // Super triangle enclosing everything
+            const p1 = { ux: midx - 20 * deltaMax, uy: midy - deltaMax };
+            const p2 = { ux: midx, uy: midy + 20 * deltaMax };
+            const p3 = { ux: midx + 20 * deltaMax, uy: midy - deltaMax };
+            
+            let triangles = [[p1, p2, p3]];
+
+            function circumcircle(t) {
+                const a = t[0], b = t[1], c = t[2];
+                const D = 2 * (a.ux * (b.uy - c.uy) + b.ux * (c.uy - a.uy) + c.ux * (a.uy - b.uy));
+                if (Math.abs(D) < 0.000001) return { x: 0, y: 0, rsq: Infinity };
+                
+                const ax2y2 = a.ux*a.ux + a.uy*a.uy;
+                const bx2y2 = b.ux*b.ux + b.uy*b.uy;
+                const cx2y2 = c.ux*c.ux + c.uy*c.uy;
+                
+                const cx_ = (ax2y2 * (b.uy - c.uy) + bx2y2 * (c.uy - a.uy) + cx2y2 * (a.uy - b.uy)) / D;
+                const cy_ = (ax2y2 * (c.ux - b.ux) + bx2y2 * (a.ux - c.ux) + cx2y2 * (b.ux - a.ux)) / D;
+                return { x: cx_, y: cy_, rsq: (a.ux - cx_)*(a.ux - cx_) + (a.uy - cy_)*(a.uy - cy_) };
             }
+
+            vertices.forEach(v => {
+                const edges = [];
+                const goodTriangles = [];
+
+                triangles.forEach(t => {
+                    const c = circumcircle(t);
+                    const distSq = (v.ux - c.x)*(v.ux - c.x) + (v.uy - c.y)*(v.uy - c.y);
+                    if (distSq <= c.rsq) {
+                        edges.push([t[0], t[1]], [t[1], t[2]], [t[2], t[0]]);
+                    } else {
+                        goodTriangles.push(t);
+                    }
+                });
+
+                triangles = goodTriangles;
+
+                for (let i = 0; i < edges.length; i++) {
+                    const e1 = edges[i];
+                    if (!e1) continue;
+                    let unique = true;
+                    for (let j = i + 1; j < edges.length; j++) {
+                        const e2 = edges[j];
+                        if (e2 && ((e1[0] === e2[0] && e1[1] === e2[1]) || (e1[0] === e2[1] && e1[1] === e2[0]))) {
+                            edges[j] = null;
+                            unique = false;
+                        }
+                    }
+                    if (unique) triangles.push([e1[0], e1[1], v]);
+                }
+            });
+
+            return triangles.filter(t => !t.includes(p1) && !t.includes(p2) && !t.includes(p3));
+        }
+
+        // 1. Initialize Sparse Mesh
+        if (!wrapper._mesh) {
+            wrapper._mesh = { vertices: [], triangles: [] };
+            
+            // Generate Outer Bound Vertices (Corners + Edge Midpoints)
+            const addV = (ux, uy) => wrapper._mesh.vertices.push({ ux, uy, z: 0, x: ux, y: uy, isEdge: true });
+            
+            addV(0, 0); addV(w, 0); addV(w, h); addV(0, h);
+            addV(w/2, 0); addV(w/2, h); addV(0, h/2); addV(w, h/2);
+            
+            wrapper._mesh.triangles = triangulate(wrapper._mesh.vertices);
         }
 
         const mesh = wrapper._mesh;
 
-        // 2. Generate Cellular Geometry (Voronoi F2-F1 basis)
-        // This math guarantees perfectly straight, sharp creases and wide, flat polygonal plains.
-        if (!mesh.layers) mesh.layers = [];
-        
-        // Add 1 layer of structural geometry per click
-        const numLayers = 1;
-        const maxDim = Math.max(w, h);
-        for (let i = 0; i < numLayers; i++) {
-            const nodes = [];
-            // Generate 3 to 5 focal nodes for this layer (these define the cells/facets)
-            const numNodes = 3 + Math.floor(Math.random() * 3);
-            for (let j = 0; j < numNodes; j++) {
-                nodes.push({ x: Math.random() * w, y: Math.random() * h });
-            }
-            mesh.layers.push({
-                nodes: nodes,
-                polarity: Math.random() > 0.5 ? 1 : -1, // Folds inward or outward
-                strength: 20 + Math.random() * 30,      // Depth of the crease
-                sharpness: 0.03 + Math.random() * 0.02  // How quickly the crease flattens out into a plain
+        // 2. Add just 2-3 random massive structural focal points per click
+        const numNewPoints = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < numNewPoints; i++) {
+            mesh.vertices.push({
+                ux: w * 0.1 + Math.random() * w * 0.8,
+                uy: h * 0.1 + Math.random() * h * 0.8,
+                z: 0,
+                isEdge: false
             });
         }
+        
+        // Retriangulate into a handful of huge, flat planes
+        mesh.triangles = triangulate(mesh.vertices);
 
-        // 3. Apply Deformation (Cellular F2 - F1 and Foreshortening)
+        // 3. Deep Z-Displacement
         mesh.vertices.forEach(v => {
-            let z = 0;
-            mesh.layers.forEach(layer => {
-                let f1 = Infinity;
-                let f2 = Infinity;
-                
-                layer.nodes.forEach(node => {
-                    const dx = v.ux - node.x;
-                    const dy = v.uy - node.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < f1) {
-                        f2 = f1;
-                        f1 = dist;
-                    } else if (dist < f2) {
-                        f2 = dist;
-                    }
-                });
-                
-                if (f2 === Infinity) f2 = f1;
-                
-                // Voronoi Edge Distance (F2 - F1)
-                // When F2 == F1, we are exactly on the crease. F2 - F1 will be 0.
-                // When we are near a node, F2 - F1 is large (we are deep inside a flat plain).
-                
-                // Exponential decay flattens out the plain extremely quickly while keeping the crease razor sharp.
-                // depth: 0 at the crease, 1 out on the plain.
-                const flatDepth = 1 - Math.exp(-(f2 - f1) * layer.sharpness); 
-                
-                // At the crease, contribution is maximal (layer.strength). On plains, contribution is 0.
-                z += (1 - flatDepth) * layer.strength * layer.polarity; 
-            });
-            v.z = z;
+            // Edges warp less than internal vertices to keep the photo somewhat rectangular
+            const intensity = v.isEdge ? 20 : 50; 
+            if (!v.isEdge || Math.random() > 0.3) {
+                // Large rigid pushes backward and forward (massive up and down structural folds)
+                v.z += (Math.random() - 0.5) * intensity; 
+            }
             
-            // Physical Foreshortening: As depth increases (Z != 0), the paper edges pull inward
-            const cx = w / 2;
-            const cy = h / 2;
-            // The deeper the folds overall, the more the silhouette shrinks
-            const shrink = Math.max(0.75, 1 - (Math.abs(v.z) * 0.0025)); 
-            
-            // Jitter is strictly removed so all triangle normals within a facet match perfectly,
-            // eliminating the "low-poly" rendering artifact.
+            const cx = w/2, cy = h/2;
+            const shrink = Math.max(0.7, 1 - (Math.abs(v.z) * 0.002));
             v.x = cx + ((v.ux - cx) * shrink);
             v.y = cy + ((v.uy - cy) * shrink);
         });
 
-        // 4. Rendering
+        // 4. Rendering Huge Rigid Blocks
         ctx.clearRect(0, 0, w, h);
         const source = wrapper._sourceBuffer;
 
-        function getV(x, y) { return mesh.vertices[y * (cols + 1) + x]; }
-
-        function drawTriangle(p1, p2, p3) {
+        mesh.triangles.forEach(t => {
+            const p1 = t[0], p2 = t[1], p3 = t[2];
+            
             ctx.save();
             const cx = (p1.x + p2.x + p3.x) / 3;
             const cy = (p1.y + p2.y + p3.y) / 3;
-            const dilate = 1.015; // Eliminate AA seams
+            const dilate = 1.015; // Smooths sub-pixel clipping artifacts
 
             ctx.beginPath();
             ctx.moveTo(cx + (p1.x - cx) * dilate, cy + (p1.y - cy) * dilate);
@@ -703,44 +721,39 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.closePath();
             ctx.clip();
 
-            const x1 = p1.ux, y1 = p1.uy, x2 = p2.ux, y2 = p2.uy, x3 = p3.ux, y3 = p3.uy;
-            const u1 = p1.x, v1 = p1.y, u2 = p2.x, v2 = p2.y, u3 = p3.x, v3 = p3.y;
-            const det = (x1-x3)*(y2-y3)-(x2-x3)*(y1-y3);
-            
-            if (Math.abs(det) > 0.01) { 
-                const m11 = ((u1-u3)*(y2-y3)-(u2-u3)*(y1-y3))/det;
-                const m12 = ((v1-v3)*(y2-y3)-(v2-v3)*(y1-y3))/det;
-                const m21 = ((x1-x3)*(u2-u3)-(x2-x3)*(u1-u3))/det;
-                const m22 = ((x1-x3)*(v2-v3)-(x2-x3)*(v1-v3))/det;
-                const dx_ = u3 - m11 * x3 - m21 * y3;
-                const dy_ = v3 - m12 * x3 - m22 * y3;
-                ctx.setTransform(m11, m12, m21, m22, dx_, dy_);
+            // Perfect Affine Projection matching the 3D plane
+            const det = (p1.ux - p3.ux)*(p2.uy - p3.uy) - (p2.ux - p3.ux)*(p1.uy - p3.uy);
+            if (Math.abs(det) > 0.1) {
+                const m11 = ((p1.x - p3.x)*(p2.uy - p3.uy) - (p2.x - p3.x)*(p1.uy - p3.uy))/det;
+                const m12 = ((p1.y - p3.y)*(p2.uy - p3.uy) - (p2.y - p3.y)*(p1.uy - p3.uy))/det;
+                const m21 = ((p1.ux - p3.ux)*(p2.x - p3.x) - (p2.ux - p3.ux)*(p1.x - p3.x))/det;
+                const m22 = ((p1.ux - p3.ux)*(p2.y - p3.y) - (p2.ux - p3.ux)*(p1.y - p3.y))/det;
+                const dx = p3.x - m11 * p3.ux - m21 * p3.uy;
+                const dy = p3.y - m12 * p3.ux - m22 * p3.uy;
+                ctx.setTransform(m11, m12, m21, m22, dx, dy);
                 ctx.drawImage(source, 0, 0);
             }
             ctx.restore();
-            
-            // Directional 3D Shading
+
+            // Monolithic Flat Face Shading (Guaranteeing large Cardboard-like Planes)
             const vx1 = p2.x - p1.x, vy1 = p2.y - p1.y, vz1 = p2.z - p1.z;
             const vx2 = p3.x - p1.x, vy2 = p3.y - p1.y, vz2 = p3.z - p1.z;
             
             let nx = vy1 * vz2 - vz1 * vy2;
             let ny = vz1 * vx2 - vx1 * vz2;
             let nz = vx1 * vy2 - vy1 * vx2;
-            
             const nlen = Math.hypot(nx, ny, nz) || 1;
             nx /= nlen; ny /= nlen; nz /= nlen;
             if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; } 
-
-            const lx = -0.5, ly = -0.7, lz = 0.5; 
+            
+            const lx = -0.5, ly = -0.7, lz = 0.5;
             const dot = (nx * lx + ny * ly + nz * lz);
+            let intensity = dot * 0.9;
+            intensity = Math.sign(intensity) * Math.pow(Math.abs(intensity), 1.25);
             
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            
-            // Non-linear intensity scaling for sharper highlights, darker shadows
-            let intensity = dot * 0.65; 
-            intensity = Math.sign(intensity) * Math.pow(Math.abs(intensity), 1.3);
-
             if (Math.abs(intensity) > 0.02) {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                // Completely solid color cast over the entire vast polygon
                 ctx.fillStyle = intensity > 0 
                     ? `rgba(255,255,255,${Math.min(0.9, intensity)})` 
                     : `rgba(0,0,0,${Math.min(0.9, -intensity)})`;
@@ -750,36 +763,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.lineTo(p3.x, p3.y);
                 ctx.fill();
             }
-            // WIREFRAME STROKE REMOVED ENTIRELY
-        }
-
-        // Draw Grid Triangles (2 per square)
-        for (let y = 0; y < rows; y++) {
-            for (let x = 0; x < cols; x++) {
-                const tl = getV(x, y);
-                const tr = getV(x + 1, y);
-                const bl = getV(x, y + 1);
-                const br = getV(x + 1, y + 1);
-                
-                // Alternate diagonal to prevent directional artifacts
-                if ((x + y) % 2 === 0) {
-                    drawTriangle(tl, tr, bl);
-                    drawTriangle(tr, br, bl);
-                } else {
-                    drawTriangle(tl, tr, br);
-                    drawTriangle(tl, br, bl);
-                }
-            }
-        }
+            
+            // Add ultra-faint micro-crease shading along the razor-sharp straight folds
+            ctx.strokeStyle = `rgba(0, 0, 0, ${Math.abs(dot) * 0.15 + 0.02})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+        });
         
-        // 5. Update Silhouette Clip-Path for Jagged Organic Edges
-        const outerPoly = [];
-        for (let x = 0; x <= cols; x++) outerPoly.push(getV(x, 0));
-        for (let y = 1; y <= rows; y++) outerPoly.push(getV(cols, y));
-        for (let x = cols - 1; x >= 0; x--) outerPoly.push(getV(x, rows));
-        for (let y = rows - 1; y >= 1; y--) outerPoly.push(getV(0, y));
-
-        wrapper.style.clipPath = 'polygon(' + outerPoly.map(p => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(', ') + ')';
+        // 5. Update Silhouette (Clip-Path tracking outermost edges perfectly)
+        const boundaryNodes = mesh.vertices.filter(v => v.isEdge);
+        // Sort strictly clockwise starting from center 
+        boundaryNodes.sort((a, b) => {
+            const angA = Math.atan2(a.uy - h/2, a.ux - w/2);
+            const angB = Math.atan2(b.uy - h/2, b.ux - w/2);
+            return angA - angB;
+        });
+        wrapper.style.clipPath = 'polygon(' + boundaryNodes.map(p => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(', ') + ')';
     }
 
     crumpleBtn.addEventListener('click', () => {
