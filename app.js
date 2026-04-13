@@ -702,28 +702,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const prevY = drop.y;
                 drop.y += drop.speed;
-                drop.mass -= 0.003; // Slowly evaporates as it deposits its trail
+                // Slowly evaporate to simulate water loss, BUT stop shrinking at 2.0 (4px thick) so the droplet remains highly physically visible when stopped
+                if (drop.mass > 2.0) {
+                    drop.mass -= 0.002; 
+                }
                 
                 const r = drop.mass; 
                 
-                // If it loses enough mass, surface tension stops the water globules from falling
-                if (r <= 1.0 || drop.y > h + r) { 
-                    // Draw one final static bead to permanently leave it baked on screen
+                // Surface tension brake: 1% chance per frame (or leaving screen bounds) causing the drop to permanently adhere to the glass
+                if (Math.random() < 0.015 || drop.y > h + r) { 
+                    // Draw one final permanent static bead (fully isolated, no trailing motion) directly onto the texture
                     if (drop.y <= h) {
                         fctx.globalCompositeOperation = 'destination-out';
                         fctx.beginPath(); fctx.arc(drop.x, drop.y, r, 0, Math.PI*2); fctx.fill();
                         
                         fctx.globalCompositeOperation = 'source-over';
-                        fctx.fillStyle = 'rgba(0,0,0,0.3)';
+                        fctx.fillStyle = 'rgba(0,0,0,0.4)'; // Bold outer refraction
                         fctx.beginPath(); fctx.arc(drop.x, drop.y, r, 0, Math.PI*2); fctx.fill();
-                        fctx.fillStyle = 'rgba(255,255,255,0.85)';
-                        fctx.beginPath(); fctx.arc(drop.x, drop.y - r*0.3, r*0.6, 0, Math.PI*2); fctx.fill();
+                        fctx.fillStyle = 'rgba(255,255,255,0.95)'; // Intense specular core
+                        fctx.beginPath(); fctx.arc(drop.x, drop.y - r*0.3, r*0.55, 0, Math.PI*2); fctx.fill();
                     }
+                    // Remove from active moving physics update queue, leaving it perpetually "baked" onto the glass texture frame over frame.
                     droplets.splice(i, 1);
                     continue;
                 }
-
- 
                 
                 // 1. Core Physics interaction: The falling drop ERASES frost (destination-out) behind it
                 fctx.globalCompositeOperation = 'destination-out';
