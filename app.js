@@ -689,15 +689,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 3. Deep Z-Displacement
         mesh.vertices.forEach(v => {
-            // Edges warp less than internal vertices to keep the photo somewhat rectangular
-            const intensity = v.isEdge ? 20 : 50; 
+            // INCREASED INTENSITY drastically for deeper geometric canyons and higher shadow contrast
+            const intensity = v.isEdge ? 30 : 150; 
             if (!v.isEdge || Math.random() > 0.3) {
                 // Large rigid pushes backward and forward (massive up and down structural folds)
                 v.z += (Math.random() - 0.5) * intensity; 
             }
             
             const cx = w/2, cy = h/2;
-            const shrink = Math.max(0.7, 1 - (Math.abs(v.z) * 0.002));
+            const shrink = Math.max(0.65, 1 - (Math.abs(v.z) * 0.0025));
             v.x = cx + ((v.ux - cx) * shrink);
             v.y = cy + ((v.uy - cy) * shrink);
         });
@@ -742,20 +742,30 @@ document.addEventListener('DOMContentLoaded', () => {
             let nx = vy1 * vz2 - vz1 * vy2;
             let ny = vz1 * vx2 - vx1 * vz2;
             let nz = vx1 * vy2 - vy1 * vx2;
+            
+            // Artificially boost the XY normal components. This forces the lighting calculation
+            // to be extremely hyper-sensitive to depth changes, guaranteeing dramatic black shadows.
+            nx *= 4.0;
+            ny *= 4.0;
+            
             const nlen = Math.hypot(nx, ny, nz) || 1;
             nx /= nlen; ny /= nlen; nz /= nlen;
             if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; } 
             
-            const lx = -0.5, ly = -0.7, lz = 0.5;
+            // Use a low grazing light angle so any face tilted slightly down plunges into darkness
+            const lx = -0.6, ly = -0.7, lz = 0.3;
             const dot = (nx * lx + ny * ly + nz * lz);
-            let intensity = dot * 0.9;
-            intensity = Math.sign(intensity) * Math.pow(Math.abs(intensity), 1.25);
             
-            if (intensity < -0.02) {
+            // The baseline flat paper (nx=0, ny=0, nz=1) will have dot = lz (0.3).
+            // Any plane tilting away from the light will dive below 0.3 instantly.
+            // We guarantee that roughly half the facets are forcefully rendered as deep shadows.
+            if (dot < 0.25) {
+                // Scale the shadow depth aggressively based on how far it tilts backward
+                let shadowIntensity = Math.pow((0.25 - dot) * 1.5, 1.2);
+                
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
-                // Completely solid shadow shadow cast over the dark-facing polygon
-                // No white highlights are drawn, preserving the pristine photo on light-facing polygons
-                ctx.fillStyle = `rgba(0,0,0,${Math.min(0.9, -intensity)})`;
+                // Completely solid shadow cast over the dark-facing polygon
+                ctx.fillStyle = `rgba(0,0,0,${Math.min(0.85, shadowIntensity)})`;
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
@@ -764,8 +774,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             // Add ultra-faint micro-crease shading along the razor-sharp straight folds
-            ctx.strokeStyle = `rgba(0, 0, 0, ${Math.abs(dot) * 0.15 + 0.02})`;
-            ctx.lineWidth = 0.5;
+            ctx.strokeStyle = `rgba(0, 0, 0, ${Math.abs(dot) * 0.15 + 0.05})`;
+            ctx.lineWidth = 1.0;
             ctx.stroke();
         });
         
