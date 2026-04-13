@@ -880,6 +880,9 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (currentMode === 'frost') {
                 if (!wrapper._frostedBuffer) {
                     applyFrostEffect(wrapper);
+                    isInteracting = false; // Consume the click so the user must click-and-drag again to wipe
+                    wrapper.releasePointerCapture(e.pointerId);
+                    return;
                 }
                 wrapper._lastWipe = null;
                 wipePoint(e);
