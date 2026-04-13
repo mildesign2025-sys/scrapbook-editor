@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const toggleWetFrost = document.getElementById('toggleWetFrost');
     const clipControl = document.getElementById('clipControl');
     const clipStatus = document.getElementById('clipStatus');
+    const finishClipBtn = document.getElementById('finishClip');
 
     const dpr = window.devicePixelRatio || 1;
 
@@ -52,7 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (newMode !== 'clip') {
             selectedPiecesForClip.forEach(p => p.classList.remove('clip-selected'));
             selectedPiecesForClip = [];
-            clipStatus.textContent = "Click to stack";
+            clipStatus.textContent = "Select 2+";
+            finishClipBtn.style.display = 'none';
         }
         
         // When entering frost mode, trigger the frosted glass generation on the currently active piece
@@ -67,6 +69,23 @@ document.addEventListener('DOMContentLoaded', () => {
     modeFrostBtn.addEventListener('click', () => updateMode('frost'));
     modeClipBtn.addEventListener('click', () => updateMode('clip'));
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
+
+    finishClipBtn.addEventListener('click', () => {
+        if (selectedPiecesForClip.length >= 2) {
+            clipStatus.textContent = "Stacking...";
+            const piecesToStack = [...selectedPiecesForClip];
+            selectedPiecesForClip = [];
+            
+            // Clean up highlight on pieces
+            piecesToStack.forEach(p => p.classList.remove('clip-selected'));
+            
+            createPaperclipStack(piecesToStack);
+            
+            clipStatus.textContent = "Select 2+";
+            finishClipBtn.style.display = 'none';
+            updateMode('drag');
+        }
+    });
 
     toggleWetFrost.addEventListener('click', () => {
         wetFrostEnabled = !wetFrostEnabled;
@@ -969,16 +988,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     wrapper.classList.add('clip-selected');
                 }
                 
-                if (selectedPiecesForClip.length >= 2) {
-                    clipStatus.textContent = "Creating stack...";
-                    setTimeout(() => {
-                        createPaperclipStack(selectedPiecesForClip);
-                        selectedPiecesForClip = [];
-                        clipStatus.textContent = "Click to stack";
-                        updateMode('drag'); // Switch to drag mode to handle the new stack
-                    }, 400);
+                const count = selectedPiecesForClip.length;
+                if (count >= 2) {
+                    clipStatus.textContent = `${count} selected`;
+                    finishClipBtn.style.display = 'block';
+                } else if (count === 1) {
+                    clipStatus.textContent = "Select another...";
+                    finishClipBtn.style.display = 'none';
                 } else {
-                    clipStatus.textContent = selectedPiecesForClip.length === 1 ? "Select another..." : "Click to stack";
+                    clipStatus.textContent = "Select 2+";
+                    finishClipBtn.style.display = 'none';
                 }
                 return;
             }
