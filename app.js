@@ -581,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-    // --- Realistic Facet-Based Crumple Effect (Shared Vertex Refactor) ---
+    // --- High-Fidelity Procedural Grid Crumple Effect (Phase 1.3) ---
     function applyCrumpleEffect(wrapper) {
         if (!wrapper) return;
         const canvas = wrapper.querySelector('canvas');
@@ -596,92 +596,89 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper._sourceBuffer = buffer;
         }
 
-        // 1. Initialize or Load Mesh State
-        // A vertex is {x, y, ux, uy}. Facets are arrays of vertex references.
+        const cols = 30; // High resolution for organic folds
+        const rows = 30;
+
+        // 1. Initialize Grid Mesh State
         if (!wrapper._mesh) {
-            const v1 = {x: 0, y: 0, z: 0, ux: 0, uy: 0};
-            const v2 = {x: w, y: 0, z: 0, ux: w, uy: 0};
-            const v3 = {x: w, y: h, z: 0, ux: w, uy: h};
-            const v4 = {x: 0, y: h, z: 0, ux: 0, uy: h};
             wrapper._mesh = {
-                vertices: [v1, v2, v3, v4],
-                facets: [[v1, v2, v3, v4]]
+                vertices: [],
+                stressWaves: []
             };
+            for (let y = 0; y <= rows; y++) {
+                for (let x = 0; x <= cols; x++) {
+                    const ux = (x / cols) * w;
+                    const uy = (y / rows) * h;
+                    wrapper._mesh.vertices.push({ x: ux, y: uy, z: 0, ux: ux, uy: uy });
+                }
+            }
         }
 
         const mesh = wrapper._mesh;
 
-        // 2. Cumulative Recursive Splitting
-        const numSplits = 1 + Math.floor(Math.random() * 2);
-        for (let s = 0; s < numSplits; s++) {
-            const angle = Math.random() * Math.PI * 2;
-            const nx = Math.cos(angle);
-            const ny = Math.sin(angle);
-            const cx = w * 0.2 + Math.random() * w * 0.6;
-            const cy = h * 0.2 + Math.random() * h * 0.6;
-            const c = -(nx * cx + ny * cy);
-
-            const newFacets = [];
-            const newVertices = [...mesh.vertices];
-
-            mesh.facets.forEach(points => {
-                const sideA = [], sideB = [];
-                for (let i = 0; i < points.length; i++) {
-                    const v1 = points[i];
-                    const v2 = points[(i + 1) % points.length];
-                    const d1 = nx * v1.x + ny * v1.y + c;
-                    const d2 = nx * v2.x + ny * v2.y + c;
-
-                    if (d1 >= 0) sideA.push(v1);
-                    else sideB.push(v1);
-
-                    if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) {
-                        const t = Math.abs(d1) / (Math.abs(d1) + Math.abs(d2));
-                        // Check if an intersection at this UV already exists to maintain shared vertex pool
-                        const iux = v1.ux + t * (v2.ux - v1.ux);
-                        const iuy = v1.uy + t * (v2.uy - v1.uy);
-                        
-                        let intersect = newVertices.find(v => Math.abs(v.ux - iux) < 0.1 && Math.abs(v.uy - iuy) < 0.1);
-                        if (!intersect) {
-                            intersect = {
-                                x: v1.x + t * (v2.x - v1.x),
-                                y: v1.y + t * (v2.y - v1.y),
-                                z: v1.z + t * (v2.z - v1.z),
-                                ux: iux, 
-                                uy: iuy
-                            };
-                            newVertices.push(intersect);
-                        }
-                        sideA.push(intersect);
-                        sideB.push(intersect);
-                    }
-                }
-                if (sideA.length >= 3) newFacets.push(sideA);
-                if (sideB.length >= 3) newFacets.push(sideB);
+        // 2. Generate Procedural Stress Waves (Billow Noise basis)
+        const numWaves = 2 + Math.floor(Math.random() * 3);
+        const maxDim = Math.max(w, h);
+        for (let i = 0; i < numWaves; i++) {
+            mesh.stressWaves.push({
+                angle: Math.random() * Math.PI * 2,
+                freq: 3 + Math.random() * 8,       
+                phase: Math.random() * Math.PI * 2, 
+                amplitude: 15 + Math.random() * 25, 
+                cx: Math.random() * w,
+                cy: Math.random() * h,
+                falloff: 0.2 + Math.random() * 0.8 // localized crumples
             });
-            mesh.facets = newFacets;
-            mesh.vertices = newVertices;
         }
 
-        // 3. Collective Vertex Displacement (3D Z-axis)
+        // 3. Apply Deformation (Z depth and physical X/Y foreshortening)
         mesh.vertices.forEach(v => {
-            const isEdge = v.ux < 1 || v.ux > w - 1 || v.uy < 1 || v.uy > h - 1;
-            const jitterXY = isEdge ? 1 : (5 + Math.random() * 3);
-            const jitterZ = isEdge ? 2 : (10 + Math.random() * 15);
-            v.x += (Math.random() - 0.5) * jitterXY;
-            v.y += (Math.random() - 0.5) * jitterXY;
-            v.z += (Math.random() - 0.5) * jitterZ;
+            let z = 0;
+            mesh.stressWaves.forEach(wave => {
+                const dx = v.ux - wave.cx;
+                const dy = v.uy - wave.cy;
+                const distSq = dx * dx + dy * dy;
+                const rangeSq = maxDim * maxDim * wave.falloff;
+                
+                // Rapid cubic decay for organic, localized crushing
+                const decay = Math.max(0, 1 - Math.pow(distSq / rangeSq, 1.5));
+                
+                const p = (v.ux * Math.cos(wave.angle) + v.uy * Math.sin(wave.angle)) / maxDim;
+                
+                // Math.abs(Math.sin) creates sharp V-shape valleys indicative of folded material
+                const waveVal = Math.abs(Math.sin(p * Math.PI * wave.freq + wave.phase));
+                
+                // Superimpose high frequency micro-wrinkles
+                const micro = Math.sin(p * Math.PI * wave.freq * 3.1) * 0.1;
+                
+                z -= (waveVal + micro) * wave.amplitude * decay; 
+            });
+            v.z = z;
+            
+            // Physical Foreshortening: Pull points inward based on fold depth
+            const cx = w / 2;
+            const cy = h / 2;
+            const shrink = Math.max(0.7, 1 + (v.z * 0.0035)); // Z is mostly negative
+            
+            // Organic lateral jitter simulating fiber tension
+            const jitterX = (Math.random() - 0.5) * Math.abs(v.z * 0.08);
+            const jitterY = (Math.random() - 0.5) * Math.abs(v.z * 0.08);
+
+            v.x = cx + ((v.ux - cx) * shrink) + jitterX;
+            v.y = cy + ((v.uy - cy) * shrink) + jitterY;
         });
 
         // 4. Rendering
         ctx.clearRect(0, 0, w, h);
         const source = wrapper._sourceBuffer;
 
+        function getV(x, y) { return mesh.vertices[y * (cols + 1) + x]; }
+
         function drawTriangle(p1, p2, p3) {
             ctx.save();
             const cx = (p1.x + p2.x + p3.x) / 3;
             const cy = (p1.y + p2.y + p3.y) / 3;
-            const dilate = 1.015; // Slightly higher dilation for aggressive manifold warping
+            const dilate = 1.015; // Eliminate AA seams
 
             ctx.beginPath();
             ctx.moveTo(cx + (p1.x - cx) * dilate, cy + (p1.y - cy) * dilate);
@@ -693,58 +690,80 @@ document.addEventListener('DOMContentLoaded', () => {
             const x1 = p1.ux, y1 = p1.uy, x2 = p2.ux, y2 = p2.uy, x3 = p3.ux, y3 = p3.uy;
             const u1 = p1.x, v1 = p1.y, u2 = p2.x, v2 = p2.y, u3 = p3.x, v3 = p3.y;
             const det = (x1-x3)*(y2-y3)-(x2-x3)*(y1-y3);
-            if (Math.abs(det) < 0.1) { ctx.restore(); return; }
-
-            const m11 = ((u1-u3)*(y2-y3)-(u2-u3)*(y1-y3))/det;
-            const m12 = ((v1-v3)*(y2-y3)-(v2-v3)*(y1-y3))/det;
-            const m21 = ((x1-x3)*(u2-u3)-(x2-x3)*(u1-u3))/det;
-            const m22 = ((x1-x3)*(v2-v3)-(x2-x3)*(v1-v3))/det;
-            const dx_ = u3 - m11 * x3 - m21 * y3;
-            const dy_ = v3 - m12 * x3 - m22 * y3;
-
-            ctx.setTransform(m11, m12, m21, m22, dx_, dy_);
-            ctx.drawImage(source, 0, 0);
+            
+            if (Math.abs(det) > 0.01) { 
+                const m11 = ((u1-u3)*(y2-y3)-(u2-u3)*(y1-y3))/det;
+                const m12 = ((v1-v3)*(y2-y3)-(v2-v3)*(y1-y3))/det;
+                const m21 = ((x1-x3)*(u2-u3)-(x2-x3)*(u1-u3))/det;
+                const m22 = ((x1-x3)*(v2-v3)-(x2-x3)*(v1-v3))/det;
+                const dx_ = u3 - m11 * x3 - m21 * y3;
+                const dy_ = v3 - m12 * x3 - m22 * y3;
+                ctx.setTransform(m11, m12, m21, m22, dx_, dy_);
+                ctx.drawImage(source, 0, 0);
+            }
             ctx.restore();
             
             // Directional 3D Shading
             const vx1 = p2.x - p1.x, vy1 = p2.y - p1.y, vz1 = p2.z - p1.z;
             const vx2 = p3.x - p1.x, vy2 = p3.y - p1.y, vz2 = p3.z - p1.z;
             
-            // Cross product to get facet normal
             let nx = vy1 * vz2 - vz1 * vy2;
             let ny = vz1 * vx2 - vx1 * vz2;
             let nz = vx1 * vy2 - vy1 * vx2;
             
             const nlen = Math.hypot(nx, ny, nz) || 1;
             nx /= nlen; ny /= nlen; nz /= nlen;
-            if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; } // Point towards viewer
+            if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; } 
 
-            // Light from top-left (fixed light vector TO the light source)
             const lx = -0.5, ly = -0.7, lz = 0.5; 
             const dot = (nx * lx + ny * ly + nz * lz);
             
             ctx.setTransform(1, 0, 0, 1, 0, 0);
-            const intensity = dot * 0.45; // scale the light intensity
             
-            ctx.fillStyle = intensity > 0 ? `rgba(255,255,255,${intensity})` : `rgba(0,0,0,${-intensity})`;
-            ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p3.x, p3.y);
-            ctx.fill();
+            // Non-linear intensity scaling for sharper highlights, darker shadows
+            let intensity = dot * 0.65; 
+            intensity = Math.sign(intensity) * Math.pow(Math.abs(intensity), 1.3);
 
-            // Structural edge crease (Ambient Occlusion effect)
-            ctx.strokeStyle = `rgba(0, 0, 0, ${Math.abs(dot) * 0.15 + 0.05})`;
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
+            if (Math.abs(intensity) > 0.02) {
+                ctx.fillStyle = intensity > 0 
+                    ? `rgba(255,255,255,${Math.min(0.9, intensity)})` 
+                    : `rgba(0,0,0,${Math.min(0.9, -intensity)})`;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.lineTo(p3.x, p3.y);
+                ctx.fill();
+            }
+            // WIREFRAME STROKE REMOVED ENTIRELY
         }
 
-        mesh.facets.forEach(points => {
-            // Convex triangulation
-            for (let i = 1; i < points.length - 1; i++) {
-                drawTriangle(points[0], points[i], points[i+1]);
+        // Draw Grid Triangles (2 per square)
+        for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+                const tl = getV(x, y);
+                const tr = getV(x + 1, y);
+                const bl = getV(x, y + 1);
+                const br = getV(x + 1, y + 1);
+                
+                // Alternate diagonal to prevent directional artifacts
+                if ((x + y) % 2 === 0) {
+                    drawTriangle(tl, tr, bl);
+                    drawTriangle(tr, br, bl);
+                } else {
+                    drawTriangle(tl, tr, br);
+                    drawTriangle(tl, br, bl);
+                }
             }
-        });
+        }
+        
+        // 5. Update Silhouette Clip-Path for Jagged Organic Edges
+        const outerPoly = [];
+        for (let x = 0; x <= cols; x++) outerPoly.push(getV(x, 0));
+        for (let y = 1; y <= rows; y++) outerPoly.push(getV(cols, y));
+        for (let x = cols - 1; x >= 0; x--) outerPoly.push(getV(x, rows));
+        for (let y = rows - 1; y >= 1; y--) outerPoly.push(getV(0, y));
+
+        wrapper.style.clipPath = 'polygon(' + outerPoly.map(p => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(', ') + ')';
     }
 
     crumpleBtn.addEventListener('click', () => {
