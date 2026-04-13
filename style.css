@@ -110,6 +110,24 @@ body {
 .upload-btn-wrapper .btn { background-color: var(--supre-red); color: var(--canvas-bg); }
 #resetBtn { background-color: var(--supre-purple); color: var(--canvas-bg); }
 #crumpleBtn { background-color: #666; color: #fff; }
+#modeFrost { background-color: #fff; color: #000; border: 2px solid #000; }
+
+.btn-sm {
+    padding: 6px 10px;
+    font-size: 14px;
+}
+
+#toggleWetFrost {
+    background-color: #eee;
+    color: #000;
+    transition: all 0.2s;
+}
+
+#toggleWetFrost.active {
+    background-color: var(--supre-blue);
+    color: #fff;
+    outline: none !important;
+}
 
 
 /* Activation States (Geometric Expansion instead of shadow) */

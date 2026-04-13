@@ -18,8 +18,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
     const modeDeleteBtn = document.getElementById('modeDelete');
+    const toggleWetFrost = document.getElementById('toggleWetFrost');
 
     let currentMode = 'tear'; // 'tear', 'punch', 'drag', 'frost', or 'delete'
+    let wetFrostEnabled = true;
     document.body.classList.add('mode-tear');
 
     function updateMode(newMode) {
@@ -47,6 +49,12 @@ document.addEventListener('DOMContentLoaded', () => {
     modeDragBtn.addEventListener('click', () => updateMode('drag'));
     modeFrostBtn.addEventListener('click', () => updateMode('frost'));
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
+
+    toggleWetFrost.addEventListener('click', () => {
+        wetFrostEnabled = !wetFrostEnabled;
+        toggleWetFrost.classList.toggle('active', wetFrostEnabled);
+        toggleWetFrost.textContent = wetFrostEnabled ? '💧' : '🚫';
+    });
 
     function updatePunchPreviewSize() {
         if (currentMode !== 'punch') {
@@ -974,7 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Wiping physics: moisture is displaced to the bottom edge of the finger swipe.
             // Rather than spraying droplets directly under the mouse like a particle brush, heavy 
             // water globules condense and detach purely from the lower perimeter of the wiped area!
-            if (Math.random() < 0.005) { 
+            if (wetFrostEnabled && Math.random() < 0.1) { 
                 wrapper._droplets.push({
                     x: localX + (Math.random() - 0.5) * brushSize * 1.6, // Spread along the width of the finger
                     y: localY + brushSize * 0.9, // Spawn specifically at the bottom edge boundary
