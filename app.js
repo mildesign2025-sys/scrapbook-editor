@@ -616,55 +616,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const mesh = wrapper._mesh;
 
-        // 2. Generate Procedural Stress Waves (Billow Noise basis)
-        // Only 1-2 major creases per click. Frequencies drastically reduced for broad, realistic paper plains.
-        const numWaves = 1 + Math.floor(Math.random() * 2);
+        // 2. Generate Cellular Geometry (Voronoi F2-F1 basis)
+        // This math guarantees perfectly straight, sharp creases and wide, flat polygonal plains.
+        if (!mesh.layers) mesh.layers = [];
+        
+        // Add 1 layer of structural geometry per click
+        const numLayers = 1;
         const maxDim = Math.max(w, h);
-        for (let i = 0; i < numWaves; i++) {
-            mesh.stressWaves.push({
-                angle: Math.random() * Math.PI * 2,
-                freq: 0.4 + Math.random() * 0.8,    // Extremely broad, spanning the whole image
-                phase: Math.random() * Math.PI * 2, 
-                amplitude: 15 + Math.random() * 20, // Deeper folds to compensate for width
-                cx: Math.random() * w,
-                cy: Math.random() * h,
-                falloff: 1.5 + Math.random() * 2.0  // Folds travel across most of the canvas
+        for (let i = 0; i < numLayers; i++) {
+            const nodes = [];
+            // Generate 3 to 5 focal nodes for this layer (these define the cells/facets)
+            const numNodes = 3 + Math.floor(Math.random() * 3);
+            for (let j = 0; j < numNodes; j++) {
+                nodes.push({ x: Math.random() * w, y: Math.random() * h });
+            }
+            mesh.layers.push({
+                nodes: nodes,
+                polarity: Math.random() > 0.5 ? 1 : -1, // Folds inward or outward
+                strength: 20 + Math.random() * 30,      // Depth of the crease
+                sharpness: 0.03 + Math.random() * 0.02  // How quickly the crease flattens out into a plain
             });
         }
 
-        // 3. Apply Deformation (Z depth and physical X/Y foreshortening)
+        // 3. Apply Deformation (Cellular F2 - F1 and Foreshortening)
         mesh.vertices.forEach(v => {
             let z = 0;
-            mesh.stressWaves.forEach(wave => {
-                const dx = v.ux - wave.cx;
-                const dy = v.uy - wave.cy;
-                const distSq = dx * dx + dy * dy;
-                const rangeSq = maxDim * maxDim * wave.falloff;
+            mesh.layers.forEach(layer => {
+                let f1 = Infinity;
+                let f2 = Infinity;
                 
-                const decay = Math.max(0, 1 - Math.pow(distSq / rangeSq, 1.5));
+                layer.nodes.forEach(node => {
+                    const dx = v.ux - node.x;
+                    const dy = v.uy - node.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < f1) {
+                        f2 = f1;
+                        f1 = dist;
+                    } else if (dist < f2) {
+                        f2 = dist;
+                    }
+                });
                 
-                const p = (v.ux * Math.cos(wave.angle) + v.uy * Math.sin(wave.angle)) / maxDim;
+                if (f2 === Infinity) f2 = f1;
                 
-                // Inverted absolute sine creates very sharp V-shaped creases.
-                // Power curve (2.0) creates wide, flat paper plains between the creases.
-                let waveVal = 1 - Math.abs(Math.sin(p * Math.PI * wave.freq + wave.phase));
-                waveVal = Math.pow(waveVal, 2.0); 
+                // Voronoi Edge Distance (F2 - F1)
+                // When F2 == F1, we are exactly on the crease. F2 - F1 will be 0.
+                // When we are near a node, F2 - F1 is large (we are deep inside a flat plain).
                 
-                z -= waveVal * wave.amplitude * decay; 
+                // Exponential decay flattens out the plain extremely quickly while keeping the crease razor sharp.
+                // depth: 0 at the crease, 1 out on the plain.
+                const flatDepth = 1 - Math.exp(-(f2 - f1) * layer.sharpness); 
+                
+                // At the crease, contribution is maximal (layer.strength). On plains, contribution is 0.
+                z += (1 - flatDepth) * layer.strength * layer.polarity; 
             });
             v.z = z;
             
-            // Physical Foreshortening: Pull points inward based on fold depth
+            // Physical Foreshortening: As depth increases (Z != 0), the paper edges pull inward
             const cx = w / 2;
             const cy = h / 2;
-            const shrink = Math.max(0.7, 1 + (v.z * 0.0035)); // Z is mostly negative
+            // The deeper the folds overall, the more the silhouette shrinks
+            const shrink = Math.max(0.75, 1 - (Math.abs(v.z) * 0.0025)); 
             
-            // Organic lateral jitter simulating fiber tension
-            const jitterX = (Math.random() - 0.5) * Math.abs(v.z * 0.08);
-            const jitterY = (Math.random() - 0.5) * Math.abs(v.z * 0.08);
-
-            v.x = cx + ((v.ux - cx) * shrink) + jitterX;
-            v.y = cy + ((v.uy - cy) * shrink) + jitterY;
+            // Jitter is strictly removed so all triangle normals within a facet match perfectly,
+            // eliminating the "low-poly" rendering artifact.
+            v.x = cx + ((v.ux - cx) * shrink);
+            v.y = cy + ((v.uy - cy) * shrink);
         });
 
         // 4. Rendering
