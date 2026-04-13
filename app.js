@@ -1361,14 +1361,14 @@ document.addEventListener('DOMContentLoaded', () => {
         clip.addEventListener('pointermove', (e) => {
             if (!isDraggingStack) return;
             const dx = e.clientX - startX;
-            const dy = e.clientY - top; // Wait, top? Oops, should be startY. Fixed below.
+            const dy = e.clientY - startY;
             
             initialPartOffsets.forEach(po => {
                 po.el.style.left = `${po.left + dx}px`;
-                po.el.style.top = `${po.top + (e.clientY - startY)}px`;
+                po.el.style.top = `${po.top + dy}px`;
             });
             clip.style.left = `${clip._initialLeft + dx}px`;
-            clip.style.top = `${clip._initialTop + (e.clientY - startY)}px`;
+            clip.style.top = `${clip._initialTop + dy}px`;
         });
 
         clip.addEventListener('pointerup', (e) => {
