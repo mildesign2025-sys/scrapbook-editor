@@ -751,12 +751,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let intensity = dot * 0.9;
             intensity = Math.sign(intensity) * Math.pow(Math.abs(intensity), 1.25);
             
-            if (Math.abs(intensity) > 0.02) {
+            if (intensity < -0.02) {
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
-                // Completely solid color cast over the entire vast polygon
-                ctx.fillStyle = intensity > 0 
-                    ? `rgba(255,255,255,${Math.min(0.9, intensity)})` 
-                    : `rgba(0,0,0,${Math.min(0.9, -intensity)})`;
+                // Completely solid shadow shadow cast over the dark-facing polygon
+                // No white highlights are drawn, preserving the pristine photo on light-facing polygons
+                ctx.fillStyle = `rgba(0,0,0,${Math.min(0.9, -intensity)})`;
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
