@@ -695,12 +695,12 @@ document.addEventListener('DOMContentLoaded', () => {
             for(let i = droplets.length - 1; i >= 0; i--) {
                 const drop = droplets[i];
                 
-                drop.speed += 0.05; // gravity pulls the droplet down
-                if (drop.speed > 4.0) drop.speed = 4.0;
+                drop.speed += 0.005; // extremely slow gravity pulls the droplet down
+                if (drop.speed > 0.6) drop.speed = 0.6; // very slow terminal velocity
                 
                 const prevY = drop.y;
                 drop.y += drop.speed;
-                drop.mass -= 0.02; // Slowly evaporates as it deposits its trail
+                drop.mass -= 0.003; // Slowly evaporates as it deposits its trail
                 
                 if (drop.mass <= 0 || drop.y > h + drop.mass) {
                     droplets.splice(i, 1);
@@ -792,6 +792,31 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         // Scroll wheel event removed per user request
+
+        wrapper.addEventListener('contextmenu', (e) => {
+            if (currentMode === 'frost' && wrapper._frostedBuffer) {
+                e.preventDefault();
+                
+                // Bake the image into a flat piece so it can be conventionally cut without interactive side effects
+                const bakedCanvas = document.createElement('canvas');
+                const w = canvas.width;
+                const h = canvas.height;
+                bakedCanvas.width = w;
+                bakedCanvas.height = h;
+                const bCtx = bakedCanvas.getContext('2d');
+                
+                bCtx.drawImage(wrapper._sourceBuffer || canvas, 0, 0);
+                bCtx.drawImage(wrapper._frostedBuffer, 0, 0);
+                
+                const left = parseFloat(wrapper.style.left) || 0;
+                const top = parseFloat(wrapper.style.top) || 0;
+                
+                createDraggableTornPiece(bakedCanvas, left, top, rotation, clipPath, localScale, currentOpacity);
+                
+                wrapper.remove();
+                if (activePiece === wrapper) activePiece = null;
+            }
+        });
 
         wrapper.addEventListener('pointerdown', (e) => {
             e.stopPropagation();
