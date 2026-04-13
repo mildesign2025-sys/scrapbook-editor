@@ -618,6 +618,9 @@ document.addEventListener('DOMContentLoaded', () => {
             pCtx.lineCap = "round"; 
             pCtx.lineJoin = "round";
             
+            // Mask the fiber edges to the actual content pixels
+            pCtx.globalCompositeOperation = 'source-atop';
+
             if (tornEdgeEnabled) {
                 // Base opaque rim
                 pCtx.strokeStyle = tornEdgeColor; 
@@ -654,6 +657,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     pCtx.stroke();
                 }
             }
+
+            // Reset composite mode to default
+            pCtx.globalCompositeOperation = 'source-over';
 
             let newRot = rot + (isPoly1 ? -2 : 2) + ((Math.random()-0.5)*2);
             
