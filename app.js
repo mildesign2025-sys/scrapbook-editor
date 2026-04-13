@@ -10,8 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Modes
     const modeTearBtn = document.getElementById('modeTear');
     const modePunchBtn = document.getElementById('modePunch');
-    const sizeControl = document.getElementById('sizeControl');
-    const brushSizeSlider = document.getElementById('brushSize');
+    const punchControl = document.getElementById('punchControl');
+    const punchSizeSlider = document.getElementById('punchSize');
+    const frostControl = document.getElementById('frostControl');
+    const frostSizeSlider = document.getElementById('frostSize');
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
@@ -27,7 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
         modeDragBtn.classList.toggle('active', newMode === 'drag');
         modeFrostBtn.classList.toggle('active', newMode === 'frost');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
-        sizeControl.classList.toggle('hidden', newMode !== 'punch' && newMode !== 'frost');
+        punchControl.classList.toggle('hidden', newMode !== 'punch');
+        frostControl.classList.toggle('hidden', newMode !== 'frost');
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
 
         document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-delete');
@@ -51,11 +54,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         punchPreview.style.display = 'block';
-        const size = parseFloat(brushSizeSlider.value) || 70;
+        const size = parseFloat(punchSizeSlider.value) || 70;
         punchPreview.style.width = `${size * 2}px`;
         punchPreview.style.height = `${size * 2}px`;
     }
-    brushSizeSlider.addEventListener('input', updatePunchPreviewSize);
+    punchSizeSlider.addEventListener('input', updatePunchPreviewSize);
     updatePunchPreviewSize(); // Initial sizing
 
     const handleUpload = async (e) => {
@@ -830,7 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const mockPath = [];
                 // Absolute screen radius mapped to local canvas size
-                const screenRadius = parseFloat(brushSizeSlider.value) || 70;
+                const screenRadius = parseFloat(punchSizeSlider.value) || 70;
                 const radius = screenRadius / localScale;
                 for (let i = 0; i <= 36; i++) {
                     const angle = (i * 10) * Math.PI / 180;
@@ -910,7 +913,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fctx.globalCompositeOperation = 'destination-out';
             fctx.lineCap = 'round';
             fctx.lineJoin = 'round';
-            const brushSize = (parseFloat(brushSizeSlider.value) || 45) / localScale;
+            const brushSize = (parseFloat(frostSizeSlider.value) || 45) / localScale;
             fctx.lineWidth = brushSize * 2; // Full stroke width
 
             if (wrapper._lastWipe) {
