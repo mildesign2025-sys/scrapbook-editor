@@ -106,11 +106,85 @@ body {
 #modeTear { background-color: var(--supre-green); color: var(--canvas-bg); }
 #modePunch { background-color: var(--supre-blue); color: var(--canvas-bg); }
 #modeDrag { background-color: var(--supre-yellow); color: var(--supre-black); }
+#modeClip { background-color: var(--supre-orange); color: var(--canvas-bg); }
 #modeDelete { background-color: var(--supre-black); color: var(--canvas-bg); }
 .upload-btn-wrapper .btn { background-color: var(--supre-red); color: var(--canvas-bg); }
 #resetBtn { background-color: var(--supre-purple); color: var(--canvas-bg); }
 #crumpleBtn { background-color: #666; color: #fff; }
 #modeFrost { background-color: #fff; color: #000; border: 2px solid #000; }
+
+/* Transition for selection / stack animations */
+.torn-piece {
+    transition: outline 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.torn-piece.clip-selected {
+    outline: 6px solid var(--supre-orange);
+    outline-offset: 4px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    transform: scale(1.02) !important;
+    z-index: 9999 !important;
+}
+
+/* Clip Mode Cursor */
+body.mode-clip .torn-piece { cursor: crosshair; }
+
+/* Visual Paperclip/Binder Component */
+.paper-binder-clip {
+    position: absolute;
+    width: 60px;
+    height: 45px;
+    background: linear-gradient(to bottom, #333, #111);
+    border-radius: 4px;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    z-index: 1000;
+    pointer-events: auto;
+    cursor: grab;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 5px;
+}
+
+.paper-binder-clip::before {
+    content: '';
+    width: 40px;
+    height: 30px;
+    border: 3px solid #777;
+    border-bottom: none;
+    border-radius: 15px 15px 0 0;
+    opacity: 0.8;
+}
+
+.paper-binder-clip:active {
+    cursor: grabbing;
+}
+
+.paper-binder-clip .scatter-btn {
+    position: absolute;
+    top: -15px;
+    right: -15px;
+    background: var(--supre-red);
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.paper-binder-clip:hover .scatter-btn {
+    opacity: 1;
+}
 
 .btn-sm {
     padding: 6px 10px;

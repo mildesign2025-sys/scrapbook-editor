@@ -17,13 +17,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
+    const modeClipBtn = document.getElementById('modeClip');
     const modeDeleteBtn = document.getElementById('modeDelete');
     const toggleWetFrost = document.getElementById('toggleWetFrost');
+    const clipControl = document.getElementById('clipControl');
+    const clipStatus = document.getElementById('clipStatus');
 
     const dpr = window.devicePixelRatio || 1;
 
-    let currentMode = 'tear'; // 'tear', 'punch', 'drag', 'frost', or 'delete'
+    let currentMode = 'tear'; 
     let wetFrostEnabled = true;
+    let selectedPiecesForClip = [];
     document.body.classList.add('mode-tear');
 
     function updateMode(newMode) {
@@ -32,13 +36,24 @@ document.addEventListener('DOMContentLoaded', () => {
         modePunchBtn.classList.toggle('active', newMode === 'punch');
         modeDragBtn.classList.toggle('active', newMode === 'drag');
         modeFrostBtn.classList.toggle('active', newMode === 'frost');
+        modeClipBtn.classList.toggle('active', newMode === 'clip');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
+        
         punchControl.classList.toggle('hidden', newMode !== 'punch');
         frostControl.classList.toggle('hidden', newMode !== 'frost');
+        clipControl.classList.toggle('hidden', newMode !== 'clip');
+        
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
 
-        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-delete');
+        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-delete', 'mode-clip');
         document.body.classList.add(`mode-${newMode}`);
+        
+        // Reset selection when changing modes
+        if (newMode !== 'clip') {
+            selectedPiecesForClip.forEach(p => p.classList.remove('clip-selected'));
+            selectedPiecesForClip = [];
+            clipStatus.textContent = "Click to stack";
+        }
         
         // When entering frost mode, trigger the frosted glass generation on the currently active piece
         if (newMode === 'frost' && activePiece && activePiece._sourceBuffer && !activePiece._frostedBuffer) {
@@ -50,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modePunchBtn.addEventListener('click', () => updateMode('punch'));
     modeDragBtn.addEventListener('click', () => updateMode('drag'));
     modeFrostBtn.addEventListener('click', () => updateMode('frost'));
+    modeClipBtn.addEventListener('click', () => updateMode('clip'));
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
 
     toggleWetFrost.addEventListener('click', () => {
@@ -942,6 +958,31 @@ document.addEventListener('DOMContentLoaded', () => {
             
             activePiece = wrapper;
 
+            if (currentMode === 'clip') {
+                if (selectedPiecesForClip.includes(wrapper)) {
+                    // Deselect
+                    selectedPiecesForClip = selectedPiecesForClip.filter(p => p !== wrapper);
+                    wrapper.classList.remove('clip-selected');
+                } else {
+                    // Select
+                    selectedPiecesForClip.push(wrapper);
+                    wrapper.classList.add('clip-selected');
+                }
+                
+                if (selectedPiecesForClip.length >= 2) {
+                    clipStatus.textContent = "Creating stack...";
+                    setTimeout(() => {
+                        createPaperclipStack(selectedPiecesForClip);
+                        selectedPiecesForClip = [];
+                        clipStatus.textContent = "Click to stack";
+                        updateMode('drag'); // Switch to drag mode to handle the new stack
+                    }, 400);
+                } else {
+                    clipStatus.textContent = selectedPiecesForClip.length === 1 ? "Select another..." : "Click to stack";
+                }
+                return;
+            }
+
             if (currentMode === 'delete') {
                 wrapper.remove();
                 activePiece = null;
@@ -1258,4 +1299,122 @@ document.addEventListener('DOMContentLoaded', () => {
             activePiece = null;
         }
     });
+    function createPaperclipStack(pieces) {
+        if (!pieces || pieces.length < 2) return;
+
+        // 1. Calculate the center of the selection to align the stack
+        let sumX = 0, sumY = 0;
+        pieces.forEach(p => {
+            sumX += parseFloat(p.style.left) || 0;
+            sumY += parseFloat(p.style.top) || 0;
+        });
+        const stackX = sumX / pieces.length;
+        const stackY = sumY / pieces.length;
+
+        // 2. Prepare the pieces: remove 'clip-selected' and align them
+        pieces.forEach((p, idx) => {
+            p.classList.remove('clip-selected');
+            p.style.left = `${stackX}px`;
+            p.style.top = `${stackY}px`;
+            // Add a slight random tilt for a natural paper stack look
+            const randomRotation = (Math.random() - 0.5) * 6;
+            const currentScale = p._scrapbookState.get().currentScale || 1;
+            p.style.transform = `rotate(${randomRotation}deg) scale(${currentScale})`;
+            p.style.zIndex = 100 + idx;
+        });
+
+        // 3. Create the Visual Clip Component
+        const clip = document.createElement('div');
+        clip.className = 'paper-binder-clip';
+        clip.style.left = `${stackX + 50}px`; // Representative offset
+        clip.style.top = `${stackY}px`;
+        tornPiecesContainer.appendChild(clip);
+
+        // 4. Scatter Button
+        const scatterBtn = document.createElement('div');
+        scatterBtn.className = 'scatter-btn';
+        scatterBtn.textContent = '×';
+        clip.appendChild(scatterBtn);
+
+        // 5. Stack Interactions
+        let isDraggingStack = false;
+        let startX, startY, initialPartOffsets = [];
+
+        clip.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            if (e.button !== 0) return;
+            isDraggingStack = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            initialPartOffsets = pieces.map(p => ({
+                el: p,
+                left: parseFloat(p.style.left) || 0,
+                top: parseFloat(p.style.top) || 0
+            }));
+            const clipLeft = parseFloat(clip.style.left) || 0;
+            const clipTop = parseFloat(clip.style.top) || 0;
+            clip._initialLeft = clipLeft;
+            clip._initialTop = clipTop;
+            clip.setPointerCapture(e.pointerId);
+        });
+
+        clip.addEventListener('pointermove', (e) => {
+            if (!isDraggingStack) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - top; // Wait, top? Oops, should be startY. Fixed below.
+            
+            initialPartOffsets.forEach(po => {
+                po.el.style.left = `${po.left + dx}px`;
+                po.el.style.top = `${po.top + (e.clientY - startY)}px`;
+            });
+            clip.style.left = `${clip._initialLeft + dx}px`;
+            clip.style.top = `${clip._initialTop + (e.clientY - startY)}px`;
+        });
+
+        clip.addEventListener('pointerup', (e) => {
+            isDraggingStack = false;
+            clip.releasePointerCapture(e.pointerId);
+        });
+
+        // Flip Through: Clicking the stack cycles the top element to the back
+        clip.addEventListener('click', (e) => {
+            if (e.target === scatterBtn) {
+                // Handle Scatter separately
+                scatter();
+                return;
+            }
+            
+            // Cycle Z-Indices
+            let maxZ = 0;
+            let minZ = 10000;
+            pieces.forEach(p => {
+                const z = parseInt(p.style.zIndex);
+                if (z > maxZ) maxZ = z;
+                if (z < minZ) minZ = z;
+            });
+
+            pieces.forEach(p => {
+                let z = parseInt(p.style.zIndex);
+                if (z === maxZ) {
+                    p.style.zIndex = minZ; // Send top to bottom
+                } else {
+                    p.style.zIndex = z + 1; // Bring others up
+                }
+            });
+        });
+
+        function scatter() {
+            pieces.forEach(p => {
+                const ox = (Math.random() - 0.5) * 200;
+                const oy = (Math.random() - 0.5) * 200;
+                const curX = parseFloat(p.style.left) || 0;
+                const curY = parseFloat(p.style.top) || 0;
+                p.style.transition = 'left 0.5s ease-out, top 0.5s ease-out';
+                p.style.left = `${curX + ox}px`;
+                p.style.top = `${curY + oy}px`;
+                setTimeout(() => p.style.transition = '', 500);
+            });
+            clip.remove();
+        }
+    }
 });
