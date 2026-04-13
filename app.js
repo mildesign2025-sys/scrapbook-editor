@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeDeleteBtn = document.getElementById('modeDelete');
+    const crumpleBtn = document.getElementById('crumpleBtn');
 
     let currentMode = 'tear'; // 'tear', 'punch', 'drag', or 'delete'
     document.body.classList.add('mode-tear');
@@ -577,6 +578,146 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
+
+
+    // --- Realistic Facet-Based Crumple Effect (Phase 1) ---
+    function applyCrumpleEffect(wrapper) {
+        if (!wrapper) return;
+        const canvas = wrapper.querySelector('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // Ensure we have a source buffer for the original un-crumpled image
+        if (!wrapper._sourceBuffer) {
+            const buffer = document.createElement('canvas');
+            buffer.width = w; buffer.height = h;
+            buffer.getContext('2d').drawImage(canvas, 0, 0);
+            wrapper._sourceBuffer = buffer;
+        }
+
+        // Initialize mesh as a single rectangular facet if it doesn't exist
+        if (!wrapper._mesh) {
+            wrapper._mesh = [
+                {
+                    points: [
+                        {x: 0, y: 0, ux: 0, uy: 0},
+                        {x: w, y: 0, ux: w, uy: 0},
+                        {x: w, y: h, ux: w, uy: h},
+                        {x: 0, y: h, ux: 0, uy: h}
+                    ]
+                }
+            ];
+        }
+
+        let mesh = wrapper._mesh;
+
+        // 1. Recursive Polygon Splitting (1-3 large folds per click)
+        const numSplits = 1 + Math.floor(Math.random() * 2);
+        for (let s = 0; s < numSplits; s++) {
+            const angle = Math.random() * Math.PI * 2;
+            const nx = Math.cos(angle);
+            const ny = Math.sin(angle);
+            const cx = w * 0.2 + Math.random() * w * 0.6;
+            const cy = h * 0.2 + Math.random() * h * 0.6;
+            const c = -(nx * cx + ny * cy);
+
+            const newFacets = [];
+            mesh.forEach(facet => {
+                const sideA = [], sideB = [];
+                const pts = facet.points;
+                for (let i = 0; i < pts.length; i++) {
+                    const p1 = pts[i];
+                    const p2 = pts[(i + 1) % pts.length];
+                    const d1 = nx * p1.x + ny * p1.y + c;
+                    const d2 = nx * p2.x + ny * p2.y + c;
+
+                    if (d1 >= 0) sideA.push(p1);
+                    else sideB.push(p1);
+
+                    if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) {
+                        const t = Math.abs(d1) / (Math.abs(d1) + Math.abs(d2));
+                        const intersect = {
+                            x: p1.x + t * (p2.x - p1.x),
+                            y: p1.y + t * (p2.y - p1.y),
+                            ux: p1.ux + t * (p2.ux - p1.ux),
+                            uy: p1.uy + t * (p2.uy - p1.uy)
+                        };
+                        sideA.push(intersect);
+                        sideB.push(intersect);
+                    }
+                }
+                if (sideA.length >= 3) newFacets.push({ points: sideA });
+                if (sideB.length >= 3) newFacets.push({ points: sideB });
+            });
+            mesh = newFacets;
+        }
+        wrapper._mesh = mesh;
+
+        // 2. Facet Displacement (Ridge formation)
+        mesh.forEach(facet => {
+            facet.points.forEach(p => {
+                p.x += (Math.random() - 0.5) * 5;
+                p.y += (Math.random() - 0.5) * 5;
+            });
+        });
+
+        // 3. Rendering (Triangle Mapping + Neutral Shading)
+        ctx.clearRect(0, 0, w, h);
+        const source = wrapper._sourceBuffer;
+
+        function drawTriangle(p1, p2, p3) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.lineTo(p3.x, p3.y);
+            ctx.closePath();
+            ctx.clip();
+
+            const x1 = p1.ux, y1 = p1.uy, x2 = p2.ux, y2 = p2.uy, x3 = p3.ux, y3 = p3.uy;
+            const u1 = p1.x, v1 = p1.y, u2 = p2.x, v2 = p2.y, u3 = p3.x, v3 = p3.y;
+            const det = (x1-x3)*(y2-y3)-(x2-x3)*(y1-y3);
+            if (Math.abs(det) < 0.1) { ctx.restore(); return; }
+
+            const m11 = ((u1-u3)*(y2-y3)-(u2-u3)*(y1-y3))/det;
+            const m12 = ((v1-v3)*(y2-y3)-(v2-v3)*(y1-y3))/det;
+            const m21 = ((x1-x3)*(u2-u3)-(x2-x3)*(u1-u3))/det;
+            const m22 = ((x1-x3)*(v2-v3)-(x2-x3)*(v1-v3))/det;
+            const dx_ = u3 - m11 * x3 - m21 * y3;
+            const dy_ = v3 - m12 * x3 - m22 * y3;
+
+            ctx.setTransform(m11, m12, m21, m22, dx_, dy_);
+            ctx.drawImage(source, 0, 0);
+            ctx.restore();
+            
+            // Neutral shading based on area/tilt (simulated with random for now)
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            const shade = (Math.random() - 0.5) * 0.18;
+            ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,0,${-shade})`;
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.lineTo(p3.x, p3.y);
+            ctx.fill();
+            
+            // Sharp creases
+            ctx.strokeStyle = "rgba(0,0,0,0.05)";
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+        }
+
+        mesh.forEach(facet => {
+            for (let i = 1; i < facet.points.length - 1; i++) {
+                drawTriangle(facet.points[0], facet.points[i], facet.points[i+1]);
+            }
+        });
+    }
+
+    crumpleBtn.addEventListener('click', () => {
+        if (!activePiece) return;
+        applyCrumpleEffect(activePiece);
+    });
 
     // --- Component Logic ---
     function createDraggableTornPiece(canvas, x, y, rotation, clipPath = null, currentScale = 1, initialOpacity = 1) {
