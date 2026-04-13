@@ -580,7 +580,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-    // --- Realistic Facet-Based Crumple Effect (Phase 1) ---
+
+    // --- Realistic Facet-Based Crumple Effect (Shared Vertex Refactor) ---
     function applyCrumpleEffect(wrapper) {
         if (!wrapper) return;
         const canvas = wrapper.querySelector('canvas');
@@ -588,7 +589,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const w = canvas.width;
         const h = canvas.height;
 
-        // Ensure we have a source buffer for the original un-crumpled image
         if (!wrapper._sourceBuffer) {
             const buffer = document.createElement('canvas');
             buffer.width = w; buffer.height = h;
@@ -596,23 +596,22 @@ document.addEventListener('DOMContentLoaded', () => {
             wrapper._sourceBuffer = buffer;
         }
 
-        // Initialize mesh as a single rectangular facet if it doesn't exist
+        // 1. Initialize or Load Mesh State
+        // A vertex is {x, y, ux, uy}. Facets are arrays of vertex references.
         if (!wrapper._mesh) {
-            wrapper._mesh = [
-                {
-                    points: [
-                        {x: 0, y: 0, ux: 0, uy: 0},
-                        {x: w, y: 0, ux: w, uy: 0},
-                        {x: w, y: h, ux: w, uy: h},
-                        {x: 0, y: h, ux: 0, uy: h}
-                    ]
-                }
-            ];
+            const v1 = {x: 0, y: 0, ux: 0, uy: 0};
+            const v2 = {x: w, y: 0, ux: w, uy: 0};
+            const v3 = {x: w, y: h, ux: w, uy: h};
+            const v4 = {x: 0, y: h, ux: 0, uy: h};
+            wrapper._mesh = {
+                vertices: [v1, v2, v3, v4],
+                facets: [[v1, v2, v3, v4]]
+            };
         }
 
-        let mesh = wrapper._mesh;
+        const mesh = wrapper._mesh;
 
-        // 1. Recursive Polygon Splitting (1-3 large folds per click)
+        // 2. Cumulative Recursive Splitting
         const numSplits = 1 + Math.floor(Math.random() * 2);
         for (let s = 0; s < numSplits; s++) {
             const angle = Math.random() * Math.PI * 2;
@@ -623,61 +622,68 @@ document.addEventListener('DOMContentLoaded', () => {
             const c = -(nx * cx + ny * cy);
 
             const newFacets = [];
-            mesh.forEach(facet => {
-                const sideA = [], sideB = [];
-                const pts = facet.points;
-                for (let i = 0; i < pts.length; i++) {
-                    const p1 = pts[i];
-                    const p2 = pts[(i + 1) % pts.length];
-                    const d1 = nx * p1.x + ny * p1.y + c;
-                    const d2 = nx * p2.x + ny * p2.y + c;
+            const newVertices = [...mesh.vertices];
 
-                    if (d1 >= 0) sideA.push(p1);
-                    else sideB.push(p1);
+            mesh.facets.forEach(points => {
+                const sideA = [], sideB = [];
+                for (let i = 0; i < points.length; i++) {
+                    const v1 = points[i];
+                    const v2 = points[(i + 1) % points.length];
+                    const d1 = nx * v1.x + ny * v1.y + c;
+                    const d2 = nx * v2.x + ny * v2.y + c;
+
+                    if (d1 >= 0) sideA.push(v1);
+                    else sideB.push(v1);
 
                     if ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) {
                         const t = Math.abs(d1) / (Math.abs(d1) + Math.abs(d2));
-                        const intersect = {
-                            x: p1.x + t * (p2.x - p1.x),
-                            y: p1.y + t * (p2.y - p1.y),
-                            ux: p1.ux + t * (p2.ux - p1.ux),
-                            uy: p1.uy + t * (p2.uy - p1.uy)
-                        };
+                        // Check if an intersection at this UV already exists to maintain shared vertex pool
+                        const iux = v1.ux + t * (v2.ux - v1.ux);
+                        const iuy = v1.uy + t * (v2.uy - v1.uy);
+                        
+                        let intersect = newVertices.find(v => Math.abs(v.ux - iux) < 0.1 && Math.abs(v.uy - iuy) < 0.1);
+                        if (!intersect) {
+                            intersect = {
+                                x: v1.x + t * (v2.x - v1.x),
+                                y: v1.y + t * (v2.y - v1.y),
+                                ux: iux, 
+                                uy: iuy
+                            };
+                            newVertices.push(intersect);
+                        }
                         sideA.push(intersect);
                         sideB.push(intersect);
                     }
                 }
-                if (sideA.length >= 3) newFacets.push({ points: sideA });
-                if (sideB.length >= 3) newFacets.push({ points: sideB });
+                if (sideA.length >= 3) newFacets.push(sideA);
+                if (sideB.length >= 3) newFacets.push(sideB);
             });
-            mesh = newFacets;
+            mesh.facets = newFacets;
+            mesh.vertices = newVertices;
         }
-        wrapper._mesh = mesh;
 
-        // 2. Facet Displacement (Ridge formation)
-        mesh.forEach(facet => {
-            facet.points.forEach(p => {
-                p.x += (Math.random() - 0.5) * 5;
-                p.y += (Math.random() - 0.5) * 5;
-            });
+        // 3. Collective Vertex Displacement (Ensures no tears)
+        mesh.vertices.forEach(v => {
+            // Apply a small "crumple" jitter synchronously across all facets sharing this vertex
+            const jitter = 5 + Math.random() * 3;
+            v.x += (Math.random() - 0.5) * jitter;
+            v.y += (Math.random() - 0.5) * jitter;
         });
 
-        // 3. Rendering (Triangle Mapping + Neutral Shading)
+        // 4. Rendering
         ctx.clearRect(0, 0, w, h);
         const source = wrapper._sourceBuffer;
 
         function drawTriangle(p1, p2, p3) {
             ctx.save();
-            
-            // --- Seam Fix: Slightly dilate the clipping path to prevent AA gaps ---
             const cx = (p1.x + p2.x + p3.x) / 3;
             const cy = (p1.y + p2.y + p3.y) / 3;
-            const expand = 1.01; // 1% expansion handles sub-pixel seams
-            
+            const dilate = 1.015; // Slightly higher dilation for aggressive manifold warping
+
             ctx.beginPath();
-            ctx.moveTo(cx + (p1.x - cx) * expand, cy + (p1.y - cy) * expand);
-            ctx.lineTo(cx + (p2.x - cx) * expand, cy + (p2.y - cy) * expand);
-            ctx.lineTo(cx + (p3.x - cx) * expand, cy + (p3.y - cy) * expand);
+            ctx.moveTo(cx + (p1.x - cx) * dilate, cy + (p1.y - cy) * dilate);
+            ctx.lineTo(cx + (p2.x - cx) * dilate, cy + (p2.y - cy) * dilate);
+            ctx.lineTo(cx + (p3.x - cx) * dilate, cy + (p3.y - cy) * dilate);
             ctx.closePath();
             ctx.clip();
 
@@ -697,25 +703,21 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.drawImage(source, 0, 0);
             ctx.restore();
             
-            // Neutral shading pass
+            // Neutral structural shading
             ctx.setTransform(1, 0, 0, 1, 0, 0);
-            const shade = (Math.random() - 0.5) * 0.18;
+            const shade = (Math.random() - 0.5) * 0.15;
             ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,0,${-shade})`;
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
             ctx.lineTo(p3.x, p3.y);
             ctx.fill();
-            
-            // Subtle crease stroke to emphasize facets
-            ctx.strokeStyle = "rgba(0,0,0,0.05)";
-            ctx.lineWidth = 0.5;
-            ctx.stroke();
         }
 
-        mesh.forEach(facet => {
-            for (let i = 1; i < facet.points.length - 1; i++) {
-                drawTriangle(facet.points[0], facet.points[i], facet.points[i+1]);
+        mesh.facets.forEach(points => {
+            // Convex triangulation
+            for (let i = 1; i < points.length - 1; i++) {
+                drawTriangle(points[0], points[i], points[i+1]);
             }
         });
     }
