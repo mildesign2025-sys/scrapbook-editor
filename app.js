@@ -10,8 +10,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Modes
     const modeTearBtn = document.getElementById('modeTear');
     const modePunchBtn = document.getElementById('modePunch');
-    const punchControl = document.getElementById('punchControl');
-    const punchSizeSlider = document.getElementById('punchSize');
+    const sizeControl = document.getElementById('sizeControl');
+    const brushSizeSlider = document.getElementById('brushSize');
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modeDragBtn.classList.toggle('active', newMode === 'drag');
         modeFrostBtn.classList.toggle('active', newMode === 'frost');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
-        punchControl.classList.toggle('hidden', newMode !== 'punch');
+        sizeControl.classList.toggle('hidden', newMode !== 'punch' && newMode !== 'frost');
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
 
         document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-delete');
@@ -46,11 +46,16 @@ document.addEventListener('DOMContentLoaded', () => {
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
 
     function updatePunchPreviewSize() {
-        const size = parseFloat(punchSizeSlider.value) || 70;
+        if (currentMode !== 'punch') {
+            punchPreview.style.display = 'none';
+            return;
+        }
+        punchPreview.style.display = 'block';
+        const size = parseFloat(brushSizeSlider.value) || 70;
         punchPreview.style.width = `${size * 2}px`;
         punchPreview.style.height = `${size * 2}px`;
     }
-    punchSizeSlider.addEventListener('input', updatePunchPreviewSize);
+    brushSizeSlider.addEventListener('input', updatePunchPreviewSize);
     updatePunchPreviewSize(); // Initial sizing
 
     const handleUpload = async (e) => {
@@ -575,7 +580,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const clipPathStr = 'polygon(' + poly.map(p => `${(p.x - minX).toFixed(1)}px ${(p.y - minY).toFixed(1)}px`).join(', ') + ')';
 
-            createDraggableTornPiece(newCanvas, exactLeft, exactTop, newRot, clipPathStr, scale);
+            const newPiece = createDraggableTornPiece(newCanvas, exactLeft, exactTop, newRot, clipPathStr, scale);
+            
+            // Re-apply Frost Glass layer if present on parent
+            if (sourceCanvasWrapper._frostedBuffer) {
+                const newFrost = document.createElement('canvas');
+                newFrost.width = pw;
+                newFrost.height = ph;
+                const fCtx = newFrost.getContext('2d', { willReadFrequently: true });
+                fCtx.translate(-minX, -minY);
+                fCtx.beginPath();
+                fCtx.moveTo(poly[0].x, poly[0].y);
+                for(let i=1; i<poly.length; i++) fCtx.lineTo(poly[i].x, poly[i].y);
+                fCtx.closePath();
+                fCtx.clip();
+                
+                fCtx.drawImage(sourceCanvasWrapper._frostedBuffer, 0, 0);
+                
+                newFrost.className = 'frost-overlay';
+                newFrost.style.position = 'absolute';
+                newFrost.style.top = '0';
+                newFrost.style.left = '0';
+                newFrost.style.pointerEvents = 'none';
+                newFrost.style.zIndex = '5';
+                
+                newPiece.appendChild(newFrost);
+                newPiece._frostedBuffer = newFrost;
+                // Preserve original raw un-frosted source wrapper
+                if (sourceCanvasWrapper._sourceBuffer) {
+                    const srcBuffer = document.createElement('canvas');
+                    srcBuffer.width = pw; srcBuffer.height = ph;
+                    const bCtx = srcBuffer.getContext('2d', { willReadFrequently: true });
+                    bCtx.translate(-minX, -minY);
+                    bCtx.beginPath();
+                    bCtx.moveTo(poly[0].x, poly[0].y);
+                    for(let i=1; i<poly.length; i++) bCtx.lineTo(poly[i].x, poly[i].y);
+                    bCtx.closePath();
+                    bCtx.clip();
+                    bCtx.drawImage(sourceCanvasWrapper._sourceBuffer, 0, 0);
+                    newPiece._sourceBuffer = srcBuffer;
+                }
+                newPiece._droplets = []; 
+                newPiece._physicsLoop = true;
+                runDropletPhysics(newPiece);
+            }
         };
 
         createPieceFromPoly(poly1, true);
@@ -782,7 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const mockPath = [];
                 // Absolute screen radius mapped to local canvas size
-                const screenRadius = parseFloat(punchSizeSlider.value) || 70;
+                const screenRadius = parseFloat(brushSizeSlider.value) || 70;
                 const radius = screenRadius / localScale;
                 for (let i = 0; i <= 36; i++) {
                     const angle = (i * 10) * Math.PI / 180;
@@ -859,7 +907,8 @@ document.addEventListener('DOMContentLoaded', () => {
             fctx.globalCompositeOperation = 'destination-out';
             fctx.lineCap = 'round';
             fctx.lineJoin = 'round';
-            fctx.lineWidth = 45; // Broad finger stroke width
+            const brushSize = (parseFloat(brushSizeSlider.value) || 45) / localScale;
+            fctx.lineWidth = brushSize * 2; // Full stroke width
 
             if (wrapper._lastWipe) {
                 fctx.beginPath();
@@ -868,7 +917,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fctx.stroke();
             } else {
                 fctx.beginPath();
-                fctx.arc(localX, localY, 22.5, 0, Math.PI * 2);
+                fctx.arc(localX, localY, brushSize, 0, Math.PI * 2);
                 fctx.fill();
             }
             wrapper._lastWipe = { x: localX, y: localY };
@@ -876,7 +925,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // 15% chance per move to spawn a heavy moisture droplet at the edge of the wipe
             if (Math.random() < 0.15) { 
                 wrapper._droplets.push({
-                    x: localX + (Math.random() - 0.5) * 40,
+                    x: localX + (Math.random() - 0.5) * brushSize * 1.5,
                     y: localY,
                     mass: 3 + Math.random() * 5, 
                     speed: 0
