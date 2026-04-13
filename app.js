@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeDeleteBtn = document.getElementById('modeDelete');
     const toggleWetFrost = document.getElementById('toggleWetFrost');
 
+    const dpr = window.devicePixelRatio || 1;
+
     let currentMode = 'tear'; // 'tear', 'punch', 'drag', 'frost', or 'delete'
     let wetFrostEnabled = true;
     document.body.classList.add('mode-tear');
@@ -150,9 +152,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvasH = h;
 
         const pieceCanvas = document.createElement('canvas');
-        pieceCanvas.width = canvasW;
-        pieceCanvas.height = canvasH;
+        // High-DPI Setup
+        pieceCanvas.width = canvasW * dpr;
+        pieceCanvas.height = canvasH * dpr;
+        pieceCanvas.style.width = `${canvasW}px`;
+        pieceCanvas.style.height = `${canvasH}px`;
+        
         const ctx = pieceCanvas.getContext('2d');
+        ctx.scale(dpr, dpr);
         
         ctx.drawImage(img, 0, 0, w, h);
         
@@ -316,8 +323,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function splitCanvas(sourceCanvasWrapper, userPath, isPerfectPunch = false) {
         const sourceCanvas = sourceCanvasWrapper.querySelector('canvas');
-        const w = sourceCanvas.width;
-        const h = sourceCanvas.height;
+        const w = sourceCanvas.width / dpr;
+        const h = sourceCanvas.height / dpr;
         
         const bx = parseInt(sourceCanvasWrapper.style.left) || 0;
         const by = parseInt(sourceCanvasWrapper.style.top) || 0;
@@ -349,15 +356,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hw > 0 && hh > 0) {
                 // 1. Create Hole Cutout Piece
                 const holeCanvas = document.createElement('canvas');
-                holeCanvas.width = hw; holeCanvas.height = hh;
+                holeCanvas.width = hw * dpr; holeCanvas.height = hh * dpr;
+                holeCanvas.style.width = `${hw}px`; holeCanvas.style.height = `${hh}px`;
                 const hCtx = holeCanvas.getContext('2d');
+                hCtx.scale(dpr, dpr);
                 hCtx.translate(-minX, -minY);
                 hCtx.beginPath();
                 hCtx.moveTo(jaggedPath[0].x, jaggedPath[0].y);
                 for(let i=1; i<jaggedPath.length; i++) hCtx.lineTo(jaggedPath[i].x, jaggedPath[i].y);
                 hCtx.closePath();
                 hCtx.clip();
-                hCtx.drawImage(sourceCanvas, 0, 0);
+                hCtx.drawImage(sourceCanvas, 0, 0, w, h);
 
                 if (!isPerfectPunch) {
                     // Add styling to Hole Core
@@ -369,9 +378,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // 2. Create Frame Piece (Same size as original, but with a hole erasing it)
                 const frameCanvas = document.createElement('canvas');
-                frameCanvas.width = w; frameCanvas.height = h;
+                frameCanvas.width = w * dpr; frameCanvas.height = h * dpr;
+                frameCanvas.style.width = `${w}px`; frameCanvas.style.height = `${h}px`;
                 const fCtx = frameCanvas.getContext('2d');
-                fCtx.drawImage(sourceCanvas, 0, 0); 
+                fCtx.scale(dpr, dpr);
+                fCtx.drawImage(sourceCanvas, 0, 0, w, h); 
                 
                 // Erase Hole
                 fCtx.globalCompositeOperation = 'destination-out';
@@ -512,10 +523,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if(pw <= 0 || ph <= 0) return;
 
             const newCanvas = document.createElement('canvas');
-            newCanvas.width = pw;
-            newCanvas.height = ph;
+            newCanvas.width = pw * dpr;
+            newCanvas.height = ph * dpr;
+            newCanvas.style.width = `${pw}px`;
+            newCanvas.style.height = `${ph}px`;
+            
             const pCtx = newCanvas.getContext('2d');
-
+            pCtx.scale(dpr, dpr);
             pCtx.translate(-minX, -minY);
             
             pCtx.beginPath();
@@ -524,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pCtx.closePath();
             pCtx.clip();
 
-            pCtx.drawImage(sourceCanvas, 0, 0);
+            pCtx.drawImage(sourceCanvas, 0, 0, w, h);
 
             // Trace ONLY the torn edge (jaggedPath) for the white paper effects, skipping the original straight bounds
             pCtx.beginPath();
@@ -596,9 +610,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // Re-apply Frost Glass layer if present on parent
             if (sourceCanvasWrapper._frostedBuffer) {
                 const newFrost = document.createElement('canvas');
-                newFrost.width = pw;
-                newFrost.height = ph;
+                newFrost.width = pw * dpr;
+                newFrost.height = ph * dpr;
+                newFrost.style.width = `${pw}px`;
+                newFrost.style.height = `${ph}px`;
+
                 const fCtx = newFrost.getContext('2d', { willReadFrequently: true });
+                fCtx.scale(dpr, dpr);
                 fCtx.translate(-minX, -minY);
                 fCtx.beginPath();
                 fCtx.moveTo(poly[0].x, poly[0].y);
@@ -606,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fCtx.closePath();
                 fCtx.clip();
                 
-                fCtx.drawImage(sourceCanvasWrapper._frostedBuffer, 0, 0);
+                fCtx.drawImage(sourceCanvasWrapper._frostedBuffer, 0, 0, w, h);
                 
                 newFrost.className = 'frost-overlay';
                 newFrost.style.position = 'absolute';
@@ -615,13 +633,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 newFrost.style.pointerEvents = 'none';
                 newFrost.style.zIndex = '5';
                 
-                newPiece.appendChild(newFrost);
-                newPiece._frostedBuffer = newFrost;
-
                 // Also initialize the transient water head buffer for the new pieces
                 const newWater = document.createElement('canvas');
-                newWater.width = pw;
-                newWater.height = ph;
+                newWater.width = pw * dpr;
+                newWater.height = ph * dpr;
+                newWater.style.width = `${pw}px`;
+                newWater.style.height = `${ph}px`;
+
                 newWater.className = 'water-overlay';
                 newWater.style.position = 'absolute';
                 newWater.style.top = '0';
@@ -634,15 +652,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Preserve original raw un-frosted source wrapper
                 if (sourceCanvasWrapper._sourceBuffer) {
                     const srcBuffer = document.createElement('canvas');
-                    srcBuffer.width = pw; srcBuffer.height = ph;
+                    srcBuffer.width = pw * dpr; srcBuffer.height = ph * dpr;
+                    srcBuffer.style.width = `${pw}px`;
+                    srcBuffer.style.height = `${ph}px`;
+
                     const bCtx = srcBuffer.getContext('2d', { willReadFrequently: true });
+                    bCtx.scale(dpr, dpr);
                     bCtx.translate(-minX, -minY);
                     bCtx.beginPath();
                     bCtx.moveTo(poly[0].x, poly[0].y);
                     for(let i=1; i<poly.length; i++) bCtx.lineTo(poly[i].x, poly[i].y);
                     bCtx.closePath();
                     bCtx.clip();
-                    bCtx.drawImage(sourceCanvasWrapper._sourceBuffer, 0, 0);
+                    bCtx.drawImage(sourceCanvasWrapper._sourceBuffer, 0, 0, w, h);
                     newPiece._sourceBuffer = srcBuffer;
                 }
                 newPiece._droplets = []; 
@@ -667,18 +689,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const sourceCanvas = wrapper.querySelector('canvas');
         if (!sourceCanvas || sourceCanvas.classList.contains('frost-overlay')) return;
         
-        const w = sourceCanvas.width;
-        const h = sourceCanvas.height;
+        const w = sourceCanvas.width / dpr;
+        const h = sourceCanvas.height / dpr;
 
         if (!wrapper._sourceBuffer) {
             const buffer = document.createElement('canvas');
-            buffer.width = w; buffer.height = h;
-            buffer.getContext('2d', {willReadFrequently:true}).drawImage(sourceCanvas, 0, 0);
+            buffer.width = w * dpr; buffer.height = h * dpr;
+            buffer.style.width = `${w}px`;
+            buffer.style.height = `${h}px`;
+            const bCtx = buffer.getContext('2d', {willReadFrequently:true});
+            bCtx.scale(dpr, dpr);
+            bCtx.drawImage(sourceCanvas, 0, 0, w, h);
             wrapper._sourceBuffer = buffer;
         }
 
         const frostCanvas = document.createElement('canvas');
-        frostCanvas.width = w; frostCanvas.height = h;
+        frostCanvas.width = w * dpr; frostCanvas.height = h * dpr;
+        frostCanvas.style.width = `${w}px`;
+        frostCanvas.style.height = `${h}px`;
+
         frostCanvas.className = 'frost-overlay';
         frostCanvas.style.position = 'absolute';
         frostCanvas.style.top = '0';
@@ -687,17 +716,22 @@ document.addEventListener('DOMContentLoaded', () => {
         frostCanvas.style.zIndex = '5'; // Render above the sharp image
         
         const fctx = frostCanvas.getContext('2d', { willReadFrequently: true });
+        fctx.scale(dpr, dpr);
         
         // Create solid frosted layer (heavy blur + tint overlay)
         fctx.filter = 'blur(12px)';
-        fctx.drawImage(wrapper._sourceBuffer, 0, 0);
+        fctx.drawImage(wrapper._sourceBuffer, 0, 0, w, h);
         fctx.filter = 'none';
-           fctx.globalCompositeOperation = 'source-over';
+        
+        fctx.globalCompositeOperation = 'source-over';
         fctx.fillStyle = 'rgba(230, 240, 255, 0.4)'; // Icy condensation fog
         fctx.fillRect(0, 0, w, h);
 
         const waterCanvas = document.createElement('canvas');
-        waterCanvas.width = w; waterCanvas.height = h;
+        waterCanvas.width = w * dpr; waterCanvas.height = h * dpr;
+        waterCanvas.style.width = `${w}px`;
+        waterCanvas.style.height = `${h}px`;
+
         waterCanvas.className = 'water-overlay';
         waterCanvas.style.position = 'absolute';
         waterCanvas.style.top = '0';
@@ -856,14 +890,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Bake the image into a flat piece so it can be conventionally cut without interactive side effects
                 const bakedCanvas = document.createElement('canvas');
-                const w = canvas.width;
-                const h = canvas.height;
-                bakedCanvas.width = w;
-                bakedCanvas.height = h;
-                const bCtx = bakedCanvas.getContext('2d');
+                const cssW = canvas.width / dpr;
+                const cssH = canvas.height / dpr;
                 
-                bCtx.drawImage(wrapper._sourceBuffer || canvas, 0, 0);
-                bCtx.drawImage(wrapper._frostedBuffer, 0, 0);
+                bakedCanvas.width = cssW * dpr;
+                bakedCanvas.height = cssH * dpr;
+                bakedCanvas.style.width = `${cssW}px`;
+                bakedCanvas.style.height = `${cssH}px`;
+                
+                const bCtx = bakedCanvas.getContext('2d');
+                bCtx.scale(dpr, dpr);
+                
+                bCtx.drawImage(wrapper._sourceBuffer || canvas, 0, 0, cssW, cssH);
+                bCtx.drawImage(wrapper._frostedBuffer, 0, 0, cssW, cssH);
                 
                 const left = parseFloat(wrapper.style.left) || 0;
                 const top = parseFloat(wrapper.style.top) || 0;
@@ -882,7 +921,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Pixel-level Hit Testing (Ignore transparent holes)
             if (e.target === canvas) {
                 const ctx = canvas.getContext('2d', { willReadFrequently: true });
-                const alpha = ctx.getImageData(e.offsetX, e.offsetY, 1, 1).data[3];
+                // Account for DPR when sampling pixels
+                const alpha = ctx.getImageData(e.offsetX * dpr, e.offsetY * dpr, 1, 1).data[3];
                 if (alpha === 0) {
                     wrapper.style.pointerEvents = 'none';
                     const under = document.elementFromPoint(e.clientX, e.clientY);
@@ -952,13 +992,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (drawOverlay) { drawOverlay.remove(); }
                 drawOverlay = document.createElement('canvas');
-                drawOverlay.width = canvas.width;
-                drawOverlay.height = canvas.height;
+                const cssW = canvas.width / dpr;
+                const cssH = canvas.height / dpr;
+                
+                drawOverlay.width = cssW * dpr;
+                drawOverlay.height = cssH * dpr;
+                drawOverlay.style.width = `${cssW}px`;
+                drawOverlay.style.height = `${cssH}px`;
+                
                 drawOverlay.style.position = 'absolute';
                 drawOverlay.style.top = '0';
                 drawOverlay.style.left = '0';
                 drawOverlay.style.pointerEvents = 'none';
                 drawCtx = drawOverlay.getContext('2d');
+                drawCtx.scale(dpr, dpr);
                 wrapper.appendChild(drawOverlay);
                 
                 addTearPoint(e);
