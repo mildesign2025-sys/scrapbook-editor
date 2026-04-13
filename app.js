@@ -617,18 +617,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const mesh = wrapper._mesh;
 
         // 2. Generate Procedural Stress Waves (Billow Noise basis)
-        // Reduced max waves per click so the effect builds up more naturally
+        // Only 1-2 major creases per click. Frequencies drastically reduced for broad, realistic paper plains.
         const numWaves = 1 + Math.floor(Math.random() * 2);
         const maxDim = Math.max(w, h);
         for (let i = 0; i < numWaves; i++) {
             mesh.stressWaves.push({
                 angle: Math.random() * Math.PI * 2,
-                freq: 1.5 + Math.random() * 2.5,    // Broader folds, less dense
+                freq: 0.4 + Math.random() * 0.8,    // Extremely broad, spanning the whole image
                 phase: Math.random() * Math.PI * 2, 
-                amplitude: 8 + Math.random() * 12,  // Shallower initial depth
+                amplitude: 15 + Math.random() * 20, // Deeper folds to compensate for width
                 cx: Math.random() * w,
                 cy: Math.random() * h,
-                falloff: 0.3 + Math.random() * 1.0  // Wider area of effect
+                falloff: 1.5 + Math.random() * 2.0  // Folds travel across most of the canvas
             });
         }
 
@@ -641,20 +641,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 const distSq = dx * dx + dy * dy;
                 const rangeSq = maxDim * maxDim * wave.falloff;
                 
-                // Rapid cubic decay for organic, localized crushing
                 const decay = Math.max(0, 1 - Math.pow(distSq / rangeSq, 1.5));
                 
                 const p = (v.ux * Math.cos(wave.angle) + v.uy * Math.sin(wave.angle)) / maxDim;
                 
-                // Math.abs(Math.sin) creates sharp V-shape valleys indicative of folded material
-                // We add a slight power curve to make the valleys sharper and plateaus wider
-                let waveVal = Math.abs(Math.sin(p * Math.PI * wave.freq + wave.phase));
-                waveVal = Math.pow(waveVal, 1.2); 
+                // Inverted absolute sine creates very sharp V-shaped creases.
+                // Power curve (2.0) creates wide, flat paper plains between the creases.
+                let waveVal = 1 - Math.abs(Math.sin(p * Math.PI * wave.freq + wave.phase));
+                waveVal = Math.pow(waveVal, 2.0); 
                 
-                // Superimpose very low frequency micro-wrinkles (significantly dampened to prevent spikes)
-                const micro = Math.sin(p * Math.PI * wave.freq * 2.5) * 0.02;
-                
-                z -= (waveVal + micro) * wave.amplitude * decay; 
+                z -= waveVal * wave.amplitude * decay; 
             });
             v.z = z;
             
