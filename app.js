@@ -617,17 +617,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const mesh = wrapper._mesh;
 
         // 2. Generate Procedural Stress Waves (Billow Noise basis)
-        const numWaves = 2 + Math.floor(Math.random() * 3);
+        // Reduced max waves per click so the effect builds up more naturally
+        const numWaves = 1 + Math.floor(Math.random() * 2);
         const maxDim = Math.max(w, h);
         for (let i = 0; i < numWaves; i++) {
             mesh.stressWaves.push({
                 angle: Math.random() * Math.PI * 2,
-                freq: 3 + Math.random() * 8,       
+                freq: 1.5 + Math.random() * 2.5,    // Broader folds, less dense
                 phase: Math.random() * Math.PI * 2, 
-                amplitude: 15 + Math.random() * 25, 
+                amplitude: 8 + Math.random() * 12,  // Shallower initial depth
                 cx: Math.random() * w,
                 cy: Math.random() * h,
-                falloff: 0.2 + Math.random() * 0.8 // localized crumples
+                falloff: 0.3 + Math.random() * 1.0  // Wider area of effect
             });
         }
 
@@ -646,10 +647,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const p = (v.ux * Math.cos(wave.angle) + v.uy * Math.sin(wave.angle)) / maxDim;
                 
                 // Math.abs(Math.sin) creates sharp V-shape valleys indicative of folded material
-                const waveVal = Math.abs(Math.sin(p * Math.PI * wave.freq + wave.phase));
+                // We add a slight power curve to make the valleys sharper and plateaus wider
+                let waveVal = Math.abs(Math.sin(p * Math.PI * wave.freq + wave.phase));
+                waveVal = Math.pow(waveVal, 1.2); 
                 
-                // Superimpose high frequency micro-wrinkles
-                const micro = Math.sin(p * Math.PI * wave.freq * 3.1) * 0.1;
+                // Superimpose very low frequency micro-wrinkles (significantly dampened to prevent spikes)
+                const micro = Math.sin(p * Math.PI * wave.freq * 2.5) * 0.02;
                 
                 z -= (waveVal + micro) * wave.amplitude * decay; 
             });
