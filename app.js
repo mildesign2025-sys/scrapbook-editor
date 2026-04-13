@@ -668,10 +668,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function drawTriangle(p1, p2, p3) {
             ctx.save();
+            
+            // --- Seam Fix: Slightly dilate the clipping path to prevent AA gaps ---
+            const cx = (p1.x + p2.x + p3.x) / 3;
+            const cy = (p1.y + p2.y + p3.y) / 3;
+            const expand = 1.01; // 1% expansion handles sub-pixel seams
+            
             ctx.beginPath();
-            ctx.moveTo(p1.x, p1.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.lineTo(p3.x, p3.y);
+            ctx.moveTo(cx + (p1.x - cx) * expand, cy + (p1.y - cy) * expand);
+            ctx.lineTo(cx + (p2.x - cx) * expand, cy + (p2.y - cy) * expand);
+            ctx.lineTo(cx + (p3.x - cx) * expand, cy + (p3.y - cy) * expand);
             ctx.closePath();
             ctx.clip();
 
@@ -691,7 +697,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.drawImage(source, 0, 0);
             ctx.restore();
             
-            // Neutral shading based on area/tilt (simulated with random for now)
+            // Neutral shading pass
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             const shade = (Math.random() - 0.5) * 0.18;
             ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,0,${-shade})`;
@@ -701,7 +707,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.lineTo(p3.x, p3.y);
             ctx.fill();
             
-            // Sharp creases
+            // Subtle crease stroke to emphasize facets
             ctx.strokeStyle = "rgba(0,0,0,0.05)";
             ctx.lineWidth = 0.5;
             ctx.stroke();
