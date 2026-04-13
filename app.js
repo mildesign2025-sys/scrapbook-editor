@@ -640,6 +640,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 newWater.style.width = `${pw}px`;
                 newWater.style.height = `${ph}px`;
 
+                const wCtx = newWater.getContext('2d');
+                wCtx.scale(dpr, dpr);
+
                 newWater.className = 'water-overlay';
                 newWater.style.position = 'absolute';
                 newWater.style.top = '0';
@@ -732,6 +735,9 @@ document.addEventListener('DOMContentLoaded', () => {
         waterCanvas.style.width = `${w}px`;
         waterCanvas.style.height = `${h}px`;
 
+        const wctx = waterCanvas.getContext('2d');
+        wctx.scale(dpr, dpr);
+
         waterCanvas.className = 'water-overlay';
         waterCanvas.style.position = 'absolute';
         waterCanvas.style.top = '0';
@@ -756,8 +762,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const fctx = wrapper._frostedBuffer.getContext('2d');
         const wctx = wrapper._waterBuffer.getContext('2d');
         const droplets = wrapper._droplets;
-        const w = wrapper._frostedBuffer.width;
-        const h = wrapper._frostedBuffer.height;
+        const w = wrapper._frostedBuffer.width / dpr;
+        const h = wrapper._frostedBuffer.height / dpr;
         
         // Clear the transient water bead layer every frame
         wctx.clearRect(0, 0, w, h);
