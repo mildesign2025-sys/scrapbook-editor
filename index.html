@@ -19,6 +19,12 @@
 
     <div id="toolbar" class="hidden">
         <button class="btn btn-primary active" id="modeTear">🔪 Tear</button>
+        <div id="tearControl" class="hidden" style="display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                <input type="checkbox" id="toggleTornEdge" checked> Fiber
+            </label>
+            <input type="color" id="tornEdgeColorInput" value="#fefcf8" style="width: 30px; height: 30px; border: none; padding: 0; background: none; cursor: pointer;">
+        </div>
         <button class="btn btn-secondary" id="modePunch">⭕ Hole Punch</button>
         <div id="punchControl" class="hidden" style="display: flex; align-items: center; gap: 8px;">
             <input type="range" id="punchSize" min="2" max="50" value="15" style="width: 80px; accent-color: var(--text-color);">

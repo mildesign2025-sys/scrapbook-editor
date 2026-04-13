@@ -9,10 +9,19 @@
     --supre-orange: #F37021;
 }
 
-.clip-control-group {
+.clip-control-group, #tearControl, #punchControl, #frostControl {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+    background: rgba(255,255,255,0.1);
+    padding: 4px 12px;
+    border-left: 2px solid var(--supre-black);
+}
+
+#tornEdgeColorInput {
+    border: 2px solid var(--supre-black) !important;
+    background-color: var(--supre-black) !important;
+    border-radius: 0;
 }
 
 .btn:disabled {

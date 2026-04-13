@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Modes
     const modeTearBtn = document.getElementById('modeTear');
     const modePunchBtn = document.getElementById('modePunch');
+    const tearControl = document.getElementById('tearControl');
+    const toggleTornEdge = document.getElementById('toggleTornEdge');
+    const tornEdgeColorInput = document.getElementById('tornEdgeColorInput');
     const punchControl = document.getElementById('punchControl');
     const punchSizeSlider = document.getElementById('punchSize');
     const frostControl = document.getElementById('frostControl');
@@ -29,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMode = 'tear'; 
     let wetFrostEnabled = true;
     let selectedPiecesForClip = [];
+    let tornEdgeEnabled = true;
+    let tornEdgeColor = '#fefcf8';
     document.body.classList.add('mode-tear');
 
     function updateMode(newMode) {
@@ -40,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modeClipBtn.classList.toggle('active', newMode === 'clip');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
         
+        tearControl.classList.toggle('hidden', newMode !== 'tear');
         punchControl.classList.toggle('hidden', newMode !== 'punch');
         frostControl.classList.toggle('hidden', newMode !== 'frost');
         clipControl.classList.toggle('hidden', newMode !== 'clip');
@@ -91,6 +97,31 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleWetFrost.classList.toggle('active', wetFrostEnabled);
         toggleWetFrost.textContent = wetFrostEnabled ? '💧' : '🚫';
     });
+
+    toggleTornEdge.addEventListener('change', () => {
+        tornEdgeEnabled = toggleTornEdge.checked;
+    });
+
+    tornEdgeColorInput.addEventListener('input', () => {
+        tornEdgeColor = tornEdgeColorInput.value;
+    });
+
+    function hexToRgba(hex, alpha) {
+        let r = 255, g = 255, b = 255;
+        if (hex.startsWith('#')) {
+            const h = hex.replace('#','');
+            if (h.length === 3) {
+                r = parseInt(h[0]+h[0], 16);
+                g = parseInt(h[1]+h[1], 16);
+                b = parseInt(h[2]+h[2], 16);
+            } else {
+                r = parseInt(h.substring(0,2), 16);
+                g = parseInt(h.substring(2,4), 16);
+                b = parseInt(h.substring(4,6), 16);
+            }
+        }
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
 
     function updatePunchPreviewSize() {
         if (currentMode !== 'punch') {
