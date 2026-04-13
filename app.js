@@ -974,7 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Wiping physics: moisture is displaced to the bottom edge of the finger swipe.
             // Rather than spraying droplets directly under the mouse like a particle brush, heavy 
             // water globules condense and detach purely from the lower perimeter of the wiped area!
-            if (Math.random() < 0.15) { 
+            if (Math.random() < 0.005) { 
                 wrapper._droplets.push({
                     x: localX + (Math.random() - 0.5) * brushSize * 1.6, // Spread along the width of the finger
                     y: localY + brushSize * 0.9, // Spawn specifically at the bottom edge boundary
