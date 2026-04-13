@@ -9,10 +9,26 @@
     --supre-orange: #F37021;
 }
 
+.clip-control-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn:disabled {
+    opacity: 0.3;
+    pointer-events: none;
+    transform: none !important;
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+}
+
+.hidden {
+    display: none !important;
 }
 
 body {

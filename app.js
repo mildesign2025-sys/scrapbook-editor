@@ -54,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
             selectedPiecesForClip.forEach(p => p.classList.remove('clip-selected'));
             selectedPiecesForClip = [];
             clipStatus.textContent = "Select 2+";
-            finishClipBtn.style.display = 'none';
+            finishClipBtn.disabled = true;
         }
         
         // When entering frost mode, trigger the frosted glass generation on the currently active piece
@@ -81,8 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             createPaperclipStack(piecesToStack);
             
-            clipStatus.textContent = "Select 2+";
-            finishClipBtn.style.display = 'none';
+            finishClipBtn.disabled = true;
             updateMode('drag');
         }
     });
@@ -991,13 +990,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const count = selectedPiecesForClip.length;
                 if (count >= 2) {
                     clipStatus.textContent = `${count} selected`;
-                    finishClipBtn.style.display = 'block';
+                    finishClipBtn.disabled = false;
                 } else if (count === 1) {
                     clipStatus.textContent = "Select another...";
-                    finishClipBtn.style.display = 'none';
+                    finishClipBtn.disabled = true;
                 } else {
                     clipStatus.textContent = "Select 2+";
-                    finishClipBtn.style.display = 'none';
+                    finishClipBtn.disabled = true;
                 }
                 return;
             }
