@@ -971,12 +971,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             wrapper._lastWipe = { x: localX, y: localY };
 
-            // 15% chance per move to spawn a heavy moisture droplet at the edge of the wipe
+            // Wiping physics: moisture is displaced to the bottom edge of the finger swipe.
+            // Rather than spraying droplets directly under the mouse like a particle brush, heavy 
+            // water globules condense and detach purely from the lower perimeter of the wiped area!
             if (Math.random() < 0.15) { 
                 wrapper._droplets.push({
-                    x: localX + (Math.random() - 0.5) * brushSize * 1.5,
-                    y: localY,
-                    mass: 3 + Math.random() * 5, 
+                    x: localX + (Math.random() - 0.5) * brushSize * 1.6, // Spread along the width of the finger
+                    y: localY + brushSize * 0.9, // Spawn specifically at the bottom edge boundary
+                    mass: 2.5 + Math.random() * 3.5, 
                     speed: 0
                 });
             }
