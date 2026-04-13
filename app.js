@@ -16,7 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
     const modeDeleteBtn = document.getElementById('modeDelete');
-    const toolbar = document.getElementById('toolbar');
 
     let currentMode = 'tear'; // 'tear', 'punch', 'drag', 'frost', or 'delete'
     document.body.classList.add('mode-tear');
