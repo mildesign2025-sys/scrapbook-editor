@@ -618,38 +618,39 @@ document.addEventListener('DOMContentLoaded', () => {
             pCtx.lineCap = "round"; 
             pCtx.lineJoin = "round";
             
-            // Base opaque rim
-            pCtx.strokeStyle = "#fefcf8"; 
-            pCtx.lineWidth = 6;
-            pCtx.stroke();
+            if (tornEdgeEnabled) {
+                // Base opaque rim
+                pCtx.strokeStyle = tornEdgeColor; 
+                pCtx.lineWidth = 6;
+                pCtx.stroke();
 
-            // Transparent fibrous overlaps
-            pCtx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-            pCtx.lineWidth = 12;
-            pCtx.stroke();
-            
-            pCtx.strokeStyle = "rgba(255, 255, 255, 0.2)";
-            pCtx.lineWidth = 18;
-            pCtx.stroke();
+                // Transparent fibrous overlaps
+                pCtx.strokeStyle = hexToRgba(tornEdgeColor, 0.4);
+                pCtx.lineWidth = 12;
+                pCtx.stroke();
+                
+                pCtx.strokeStyle = hexToRgba(tornEdgeColor, 0.2);
+                pCtx.lineWidth = 18;
+                pCtx.stroke();
+            }
             
             // Random paper chunk tabs (segment by segment)
             const drawnPath = isPoly1 ? jaggedPath : [...jaggedPath].reverse();
             let currentThickness = 0;
             
             for (let i = 0; i < drawnPath.length - 1; i++) {
-                pCtx.beginPath();
-                pCtx.moveTo(drawnPath[i].x, drawnPath[i].y);
-                pCtx.lineTo(drawnPath[i+1].x, drawnPath[i+1].y);
-                
                 // Change thickness periodically to simulate paper pulling away clumps
                 if (Math.random() > 0.85) {
                     if (Math.random() > 0.6) currentThickness = Math.random() * 6 + 6; // 6-12px tab
                     else currentThickness = 0;
                 }
                 
-                if (currentThickness > 0) {
+                if (currentThickness > 0 && tornEdgeEnabled) {
+                    pCtx.beginPath();
+                    pCtx.moveTo(drawnPath[i].x, drawnPath[i].y);
+                    pCtx.lineTo(drawnPath[i+1].x, drawnPath[i+1].y);
                     pCtx.lineWidth = currentThickness + 4;
-                    pCtx.strokeStyle = "#fefcf8";
+                    pCtx.strokeStyle = tornEdgeColor;
                     pCtx.stroke();
                 }
             }
