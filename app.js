@@ -1017,7 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 wrapper._droplets.push({
                     x: localX + (Math.random() - 0.5) * brushSize * 1.6, // Spread along the width of the finger
                     y: localY + brushSize * 0.9, // Spawn specifically at the bottom edge boundary
-                    mass: brushSize, 
+                    mass: brushSize * 0.4, 
                     speed: 0
                 });
             }
