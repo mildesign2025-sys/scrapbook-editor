@@ -617,6 +617,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 newPiece.appendChild(newFrost);
                 newPiece._frostedBuffer = newFrost;
+
+                // Also initialize the transient water head buffer for the new pieces
+                const newWater = document.createElement('canvas');
+                newWater.width = pw;
+                newWater.height = ph;
+                newWater.className = 'water-overlay';
+                newWater.style.position = 'absolute';
+                newWater.style.top = '0';
+                newWater.style.left = '0';
+                newWater.style.pointerEvents = 'none';
+                newWater.style.zIndex = '6';
+                newPiece.appendChild(newWater);
+                newPiece._waterBuffer = newWater;
+
                 // Preserve original raw un-frosted source wrapper
                 if (sourceCanvasWrapper._sourceBuffer) {
                     const srcBuffer = document.createElement('canvas');
@@ -678,15 +692,23 @@ document.addEventListener('DOMContentLoaded', () => {
         fctx.filter = 'blur(12px)';
         fctx.drawImage(wrapper._sourceBuffer, 0, 0);
         fctx.filter = 'none';
-        
-        fctx.globalCompositeOperation = 'source-over';
+           fctx.globalCompositeOperation = 'source-over';
         fctx.fillStyle = 'rgba(230, 240, 255, 0.4)'; // Icy condensation fog
         fctx.fillRect(0, 0, w, h);
 
-
+        const waterCanvas = document.createElement('canvas');
+        waterCanvas.width = w; waterCanvas.height = h;
+        waterCanvas.className = 'water-overlay';
+        waterCanvas.style.position = 'absolute';
+        waterCanvas.style.top = '0';
+        waterCanvas.style.left = '0';
+        waterCanvas.style.pointerEvents = 'none';
+        waterCanvas.style.zIndex = '6'; // Render above the frost mask
 
         wrapper.appendChild(frostCanvas);
+        wrapper.appendChild(waterCanvas);
         wrapper._frostedBuffer = frostCanvas;
+        wrapper._waterBuffer = waterCanvas;
         wrapper._droplets = []; 
         
         if (!wrapper._physicsLoop) {
@@ -696,71 +718,80 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function runDropletPhysics(wrapper) {
-        if (!wrapper._frostedBuffer || !wrapper._physicsLoop) return;
+        if (!wrapper._frostedBuffer || !wrapper._waterBuffer || !wrapper._physicsLoop) return;
         const fctx = wrapper._frostedBuffer.getContext('2d');
+        const wctx = wrapper._waterBuffer.getContext('2d');
         const droplets = wrapper._droplets;
+        const w = wrapper._frostedBuffer.width;
         const h = wrapper._frostedBuffer.height;
         
+        // Clear the transient water bead layer every frame
+        wctx.clearRect(0, 0, w, h);
+
         if (droplets.length > 0) {
             for(let i = droplets.length - 1; i >= 0; i--) {
                 const drop = droplets[i];
                 
-                drop.speed += 0.005; // extremely slow gravity pulls the droplet down
-                if (drop.speed > 0.6) drop.speed = 0.6; // very slow terminal velocity
-                
-                const prevY = drop.y;
-                drop.y += drop.speed;
-                // Slowly evaporate to simulate water loss, BUT stop shrinking at 2.0 (4px thick) so the droplet remains highly physically visible when stopped
-                if (drop.mass > 2.0) {
-                    drop.mass -= 0.002; 
-                }
-                
-                const r = drop.mass; 
-                
-                // Surface tension brake: 1% chance per frame (or leaving screen bounds) causing the drop to permanently adhere to the glass
-                if (Math.random() < 0.015 || drop.y > h + r) { 
-                    // Draw one final permanent static bead (fully isolated, no trailing motion) directly onto the texture
-                    if (drop.y <= h) {
-                        fctx.globalCompositeOperation = 'destination-out';
-                        fctx.beginPath(); fctx.arc(drop.x, drop.y, r, 0, Math.PI*2); fctx.fill();
-                        
-                        fctx.globalCompositeOperation = 'source-over';
-                        fctx.fillStyle = 'rgba(0,0,0,0.4)'; // Bold outer refraction
-                        fctx.beginPath(); fctx.arc(drop.x, drop.y, r, 0, Math.PI*2); fctx.fill();
-                        fctx.fillStyle = 'rgba(255,255,255,0.95)'; // Intense specular core
-                        fctx.beginPath(); fctx.arc(drop.x, drop.y - r*0.3, r*0.55, 0, Math.PI*2); fctx.fill();
-                    }
-                    // Remove from active moving physics update queue, leaving it perpetually "baked" onto the glass texture frame over frame.
-                    droplets.splice(i, 1);
-                    continue;
-                }
-                
-                // 1. Core Physics interaction: The falling drop ERASES frost (destination-out) behind it
-                fctx.globalCompositeOperation = 'destination-out';
-                fctx.lineCap = 'round';
-                fctx.lineJoin = 'round';
-                fctx.lineWidth = r * 2;
-                fctx.beginPath();
-                fctx.moveTo(drop.x, prevY - r*0.5); 
-                fctx.lineTo(drop.x, drop.y);
-                fctx.stroke();
+                if (!drop.stagnant) {
+                    drop.speed += 0.005; // extremely slow gravity pulls the droplet down
+                    if (drop.speed > 0.6) drop.speed = 0.6; // very slow terminal velocity
+                    
+                    const prevY = drop.y;
+                    drop.y += drop.speed;
+                    // Slowly evaporate to simulate water loss during movement
+                    if (drop.mass > 1.5) drop.mass -= 0.002; 
+                    
+                    const r = drop.mass; 
 
-                // 2. Draw actual physical water bead falling downwards
-                // Utilizing source-over here creates an incredible effect because next frame's 
-                // destination-out trace will physically erase the trailing edge of this bead!
-                fctx.globalCompositeOperation = 'source-over';
+                    // 1. Persistent erasure: The falling drop ERASES frost behind it permanently
+                    fctx.globalCompositeOperation = 'destination-out';
+                    fctx.lineCap = 'round';
+                    fctx.lineJoin = 'round';
+                    fctx.lineWidth = r * 2.0;
+                    fctx.beginPath();
+                    fctx.moveTo(drop.x, prevY - r*0.5); 
+                    fctx.lineTo(drop.x, drop.y);
+                    fctx.stroke();
+
+                    // Surface tension brake: 1.5% chance per frame (or leaving screen bounds)
+                    if (Math.random() < 0.015 || drop.y > h + r) { 
+                        if (drop.y <= h) {
+                            drop.stagnant = true;
+                            drop.timer = 180 + Math.random() * 240; // 3-7 seconds of stay
+                        } else {
+                            droplets.splice(i, 1);
+                            continue;
+                        }
+                    }
+                } else {
+                    // Stagnant logic: Wait, then evaporate
+                    if (drop.timer > 0) {
+                        drop.timer--;
+                    } else {
+                        // Evaporate: reduce mass quickly
+                        drop.mass -= 0.015;
+                        if (drop.mass <= 0) {
+                            droplets.splice(i, 1);
+                            continue;
+                        }
+                    }
+                }
                 
-                // Dark bottom refractive edge of the bubble
-                fctx.fillStyle = 'rgba(0,0,0,0.3)';
-                fctx.beginPath();
-                fctx.arc(drop.x, drop.y, r, 0, Math.PI*2);
-                fctx.fill();
+                // 2. Transient rendering: Draw the visual water bead into the water layer
+                const r = drop.mass;
+                wctx.globalCompositeOperation = 'source-over';
+                
+                // Dark bottom refractive edge
+                wctx.fillStyle = 'rgba(0,0,0,0.4)';
+                wctx.beginPath();
+                wctx.arc(drop.x, drop.y, r, 0, Math.PI*2);
+                wctx.fill();
                 
                 // Bright specular lighting on top
-                fctx.fillStyle = 'rgba(255,255,255,0.85)';
-                fctx.beginPath();
-                fctx.arc(drop.x, drop.y - r*0.3, r*0.6, 0, Math.PI*2);
-                fctx.fill();
+                wctx.fillStyle = 'rgba(255,255,255,0.95)';
+                wctx.beginPath();
+                wctx.arc(drop.x, drop.y - r*0.3, r*0.6, 0, Math.PI*2);
+                wctx.fill();
             }
         }
         
