@@ -675,21 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fctx.fillStyle = 'rgba(230, 240, 255, 0.4)'; // Icy condensation fog
         fctx.fillRect(0, 0, w, h);
 
-        // Scatter initial static condensation droplets completely across the glass
-        for (let i = 0; i < 3500; i++) {
-            const dx = Math.random() * w;
-            const dy = Math.random() * h;
-            const r = 0.5 + Math.random() * 1.5;
-            
-            fctx.globalCompositeOperation = 'destination-out';
-            fctx.beginPath(); fctx.arc(dx, dy, r, 0, Math.PI*2); fctx.fill();
-            
-            fctx.globalCompositeOperation = 'source-over';
-            fctx.fillStyle = 'rgba(0,0,0,0.15)';
-            fctx.beginPath(); fctx.arc(dx, dy, r, 0, Math.PI*2); fctx.fill();
-            fctx.fillStyle = 'rgba(255,255,255,0.6)';
-            fctx.beginPath(); fctx.arc(dx, dy - r*0.3, r*0.5, 0, Math.PI*2); fctx.fill();
-        }
+
 
         wrapper.appendChild(frostCanvas);
         wrapper._frostedBuffer = frostCanvas;
