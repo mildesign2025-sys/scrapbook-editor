@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
+    const modeStretchBtn = document.getElementById('modeStretch');
+    const stretchControl = document.getElementById('stretchControl');
     const modeClipBtn = document.getElementById('modeClip');
     const modeDeleteBtn = document.getElementById('modeDelete');
     const toggleWetFrost = document.getElementById('toggleWetFrost');
@@ -41,17 +43,19 @@ document.addEventListener('DOMContentLoaded', () => {
         modePunchBtn.classList.toggle('active', newMode === 'punch');
         modeDragBtn.classList.toggle('active', newMode === 'drag');
         modeFrostBtn.classList.toggle('active', newMode === 'frost');
+        modeStretchBtn.classList.toggle('active', newMode === 'stretch');
         modeClipBtn.classList.toggle('active', newMode === 'clip');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
         
         tearControl.classList.toggle('hidden', newMode !== 'tear');
         punchControl.classList.toggle('hidden', newMode !== 'punch');
         frostControl.classList.toggle('hidden', newMode !== 'frost');
+        stretchControl.classList.toggle('hidden', newMode !== 'stretch');
         clipControl.classList.toggle('hidden', newMode !== 'clip');
         
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
 
-        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-delete', 'mode-clip');
+        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-stretch', 'mode-delete', 'mode-clip');
         document.body.classList.add(`mode-${newMode}`);
         
         // Reset selection when changing modes
@@ -72,6 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modePunchBtn.addEventListener('click', () => updateMode('punch'));
     modeDragBtn.addEventListener('click', () => updateMode('drag'));
     modeFrostBtn.addEventListener('click', () => updateMode('frost'));
+    modeStretchBtn.addEventListener('click', () => updateMode('stretch'));
     modeClipBtn.addEventListener('click', () => updateMode('clip'));
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
 
@@ -1141,6 +1146,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 wrapper._lastWipe = null;
                 wipePoint(e);
+            } else if (currentMode === 'stretch') {
+                const left = parseFloat(wrapper.style.left) || 0;
+                const top = parseFloat(wrapper.style.top) || 0;
+                const dx = e.clientX - left;
+                const dy = e.clientY - top;
+                const rotRad = -rotation * Math.PI / 180;
+                const unrotatedDx = dx * Math.cos(rotRad) - dy * Math.sin(rotRad);
+                const unrotatedDy = dx * Math.sin(rotRad) + dy * Math.cos(rotRad);
+                
+                wrapper._stretchStartX = unrotatedDx / localScale;
+                wrapper._stretchStartY = unrotatedDy / localScale;
+                wrapper._stretchAxis = null;
+
+                if (!wrapper._stretchBackup) {
+                    wrapper._stretchBackup = document.createElement('canvas');
+                }
+                wrapper._stretchBackup.width = canvas.width;
+                wrapper._stretchBackup.height = canvas.height;
+                wrapper._stretchBackup.getContext('2d').drawImage(canvas, 0, 0);
             }
         });
 
@@ -1243,6 +1267,64 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (currentMode === 'frost') {
                 wipePoint(e);
+            } else if (currentMode === 'stretch') {
+                e.preventDefault();
+                const left = parseFloat(wrapper.style.left) || 0;
+                const top = parseFloat(wrapper.style.top) || 0;
+                const dx = e.clientX - left;
+                const dy = e.clientY - top;
+                const rotRad = -rotation * Math.PI / 180;
+                const unrotatedDx = dx * Math.cos(rotRad) - dy * Math.sin(rotRad);
+                const unrotatedDy = dx * Math.sin(rotRad) + dy * Math.cos(rotRad);
+                
+                const localX = unrotatedDx / localScale;
+                const localY = unrotatedDy / localScale;
+                
+                if (!wrapper._stretchAxis) {
+                    const distTotal = Math.hypot(localX - wrapper._stretchStartX, localY - wrapper._stretchStartY);
+                    if (distTotal > 5) {
+                        wrapper._stretchAxis = Math.abs(localX - wrapper._stretchStartX) > Math.abs(localY - wrapper._stretchStartY) ? 'x' : 'y';
+                    } else {
+                        return;
+                    }
+                }
+
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                
+                // Clear and redraw backup WITHOUT scaling to avoid compounded transforms
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.globalCompositeOperation = 'copy';
+                ctx.drawImage(wrapper._stretchBackup, 0, 0);
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.scale(dpr, dpr); // Restore logical scale
+                
+                // Perform slit-scan mapping
+                const w = canvas.width / dpr;
+                const h = canvas.height / dpr;
+                
+                if (wrapper._stretchAxis === 'y') {
+                    const sy = wrapper._stretchStartY;
+                    const cy = localY;
+                    const height = cy - sy;
+                    if (Math.abs(height) > 1) {
+                        ctx.drawImage(
+                            wrapper._stretchBackup, 
+                            0, Math.floor(sy * dpr), canvas.width, 1, // src: 1 physical pixel row
+                            0, sy, w, height // dest: stretched conceptually
+                        );
+                    }
+                } else {
+                    const sx = wrapper._stretchStartX;
+                    const cx = localX;
+                    const width = cx - sx;
+                    if (Math.abs(width) > 1) {
+                        ctx.drawImage(
+                            wrapper._stretchBackup, 
+                            Math.floor(sx * dpr), 0, 1, canvas.height, // src: 1 physical pixel col
+                            sx, 0, width, h // dest: stretched sideways
+                        );
+                    }
+                }
             }
         });
 
@@ -1274,6 +1356,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (currentMode === 'frost') {
                 wrapper._lastWipe = null;
+            } else if (currentMode === 'stretch') {
+                wrapper._stretchAxis = null;
+                // Optical interactions restacking: because the image has radically changed physically,
+                // we invalidate the frozen glass layers. Next time the user selects Frost Wipe, it will regenerate
+                // properly embracing the new stretched pixels!
+                if (wrapper._frostedBuffer) {
+                    wrapper._frostedBuffer.remove();
+                    wrapper._frostedBuffer = null;
+                }
+                if (wrapper._waterBuffer) {
+                    wrapper._waterBuffer.remove();
+                    wrapper._waterBuffer = null;
+                }
+                if (wrapper._sourceBuffer) {
+                    wrapper._sourceBuffer = null;
+                }
             }
         });
     }
