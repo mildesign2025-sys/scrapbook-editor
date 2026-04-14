@@ -16,8 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchSizeSlider = document.getElementById('punchSize');
     const frostControl = document.getElementById('frostControl');
     const frostSizeSlider = document.getElementById('frostSize');
-    const stretchPreviewX = document.getElementById('stretchPreviewX');
-    const stretchPreviewY = document.getElementById('stretchPreviewY');
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
@@ -56,8 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
         clipControl.classList.toggle('hidden', newMode !== 'clip');
         
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
-        stretchPreviewX.style.display = newMode === 'stretch' ? 'block' : 'none';
-        stretchPreviewY.style.display = newMode === 'stretch' ? 'block' : 'none';
 
         document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-stretch', 'mode-delete', 'mode-clip');
         document.body.classList.add(`mode-${newMode}`);
@@ -969,6 +965,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         wrapper._rawPoly = rawPoly; // Local coordinate polygon vertices
         
+        const stretchHint = document.createElement('div');
+        stretchHint.className = 'stretch-hint';
+        wrapper.appendChild(stretchHint);
+        
         wrapper.appendChild(canvas);
         tornPiecesContainer.appendChild(wrapper);
 
@@ -1033,6 +1033,52 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 wrapper.remove();
                 if (activePiece === wrapper) activePiece = null;
+            }
+        });
+
+        wrapper.addEventListener('pointermove', (e) => {
+            if (currentMode === 'stretch' && !isInteracting) {
+                const rect = wrapper.getBoundingClientRect();
+                const dx = e.clientX - rect.left;
+                const dy = e.clientY - rect.top;
+                const rotRad = -rotation * Math.PI / 180;
+                
+                // Local unrotated coordinates
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
+                const ux = (dx - cx) * Math.cos(rotRad) - (dy - cy) * Math.sin(rotRad) + (canvas.width / dpr / 2);
+                const uy = (dx - cx) * Math.sin(rotRad) + (dy - cy) * Math.cos(rotRad) + (canvas.height / dpr / 2);
+                
+                const w = canvas.width / dpr;
+                const h = canvas.height / dpr;
+                const threshold = 20;
+                
+                stretchHint.classList.remove('active');
+                wrapper._activeEdge = null;
+                
+                if (uy < threshold) {
+                    wrapper._activeEdge = 'top';
+                    stretchHint.style.top = '0'; stretchHint.style.left = '0';
+                    stretchHint.style.width = '100%'; stretchHint.style.height = '4px';
+                    stretchHint.classList.add('active');
+                } else if (uy > h - threshold) {
+                    wrapper._activeEdge = 'bottom';
+                    stretchHint.style.bottom = '0'; stretchHint.style.left = '0';
+                    stretchHint.style.width = '100%'; stretchHint.style.height = '4px';
+                    stretchHint.classList.add('active');
+                } else if (ux < threshold) {
+                    wrapper._activeEdge = 'left';
+                    stretchHint.style.left = '0'; stretchHint.style.top = '0';
+                    stretchHint.style.height = '100%'; stretchHint.style.width = '4px';
+                    stretchHint.classList.add('active');
+                } else if (ux > w - threshold) {
+                    wrapper._activeEdge = 'right';
+                    stretchHint.style.right = '0'; stretchHint.style.top = '0';
+                    stretchHint.style.height = '100%'; stretchHint.style.width = '4px';
+                    stretchHint.classList.add('active');
+                }
+            } else if (currentMode !== 'stretch') {
+                stretchHint.classList.remove('active');
             }
         });
 
@@ -1166,24 +1212,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 wrapper._lastWipe = null;
                 wipePoint(e);
             } else if (currentMode === 'stretch') {
-                const left = parseFloat(wrapper.style.left) || 0;
-                const top = parseFloat(wrapper.style.top) || 0;
-                const dx = e.clientX - left;
-                const dy = e.clientY - top;
+                const rect = wrapper.getBoundingClientRect();
+                const dx = e.clientX - rect.left;
+                const dy = e.clientY - rect.top;
                 const rotRad = -rotation * Math.PI / 180;
-                const unrotatedDx = dx * Math.cos(rotRad) - dy * Math.sin(rotRad);
-                const unrotatedDy = dx * Math.sin(rotRad) + dy * Math.cos(rotRad);
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
                 
-                wrapper._stretchStartX = unrotatedDx / localScale;
-                wrapper._stretchStartY = unrotatedDy / localScale;
+                wrapper._stretchStartX = (dx - cx) * Math.cos(rotRad) - (dy - cy) * Math.sin(rotRad) + (canvas.width / dpr / 2);
+                wrapper._stretchStartY = (dx - cx) * Math.sin(rotRad) + (dy - cy) * Math.cos(rotRad) + (canvas.height / dpr / 2);
+                
+                wrapper._dragEdge = wrapper._activeEdge; // Use the edge detected during hover
                 wrapper._stretchAxis = null;
                 wrapper._stretchSliceCanvas = null;
                 wrapper._phantomTail = null;
                 wrapper._phantomStretcher = null;
-                
-                // Hide crosshair globally to avoid distraction while dragging
-                stretchPreviewX.style.display = 'none';
-                stretchPreviewY.style.display = 'none';
+                stretchHint.classList.remove('active');
             }
         });
 
@@ -1288,98 +1332,70 @@ document.addEventListener('DOMContentLoaded', () => {
                 wipePoint(e);
             } else if (currentMode === 'stretch') {
                 e.preventDefault();
-                const left = parseFloat(wrapper.style.left) || 0;
-                const top = parseFloat(wrapper.style.top) || 0;
-                const dx = e.clientX - left;
-                const dy = e.clientY - top;
+                const rect = wrapper.getBoundingClientRect();
+                const dx = e.clientX - rect.left;
+                const dy = e.clientY - rect.top;
                 const rotRad = -rotation * Math.PI / 180;
-                const unrotatedDx = dx * Math.cos(rotRad) - dy * Math.sin(rotRad);
-                const unrotatedDy = dx * Math.sin(rotRad) + dy * Math.cos(rotRad);
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
                 
-                const localX = unrotatedDx / localScale;
-                const localY = unrotatedDy / localScale;
+                const localX = (dx - cx) * Math.cos(rotRad) - (dy - cy) * Math.sin(rotRad) + (canvas.width / dpr / 2);
+                const localY = (dx - cx) * Math.sin(rotRad) + (dy - cy) * Math.cos(rotRad) + (canvas.height / dpr / 2);
                 
                 if (!wrapper._stretchAxis) {
                     const distTotal = Math.hypot(localX - wrapper._stretchStartX, localY - wrapper._stretchStartY);
                     if (distTotal > 5) {
-                        wrapper._stretchAxis = Math.abs(localX - wrapper._stretchStartX) > Math.abs(localY - wrapper._stretchStartY) ? 'x' : 'y';
+                        if (wrapper._dragEdge) {
+                            wrapper._stretchAxis = (wrapper._dragEdge === 'top' || wrapper._dragEdge === 'bottom') ? 'y' : 'x';
+                        } else {
+                            wrapper._stretchAxis = Math.abs(localX - wrapper._stretchStartX) > Math.abs(localY - wrapper._stretchStartY) ? 'x' : 'y';
+                        }
                         
-                        // Initial Spawn of phantom tail DOM element
+                        // Spawn phantom
                         const sx = wrapper._stretchStartX;
                         const sy = wrapper._stretchStartY;
-                        
                         const sliceCanvas = document.createElement('canvas');
                         const sctx = sliceCanvas.getContext('2d');
                         
                         if (wrapper._stretchAxis === 'y') {
-                            sliceCanvas.width = canvas.width;
-                            sliceCanvas.height = 1;
+                            sliceCanvas.width = canvas.width; sliceCanvas.height = 1;
                             sctx.drawImage(canvas, 0, Math.floor(sy * dpr), canvas.width, 1, 0, 0, canvas.width, 1);
                         } else {
-                            sliceCanvas.width = 1;
-                            sliceCanvas.height = canvas.height;
+                            sliceCanvas.width = 1; sliceCanvas.height = canvas.height;
                             sctx.drawImage(canvas, Math.floor(sx * dpr), 0, 1, canvas.height, 0, 0, 1, canvas.height);
                         }
-                        
                         wrapper._stretchSliceCanvas = sliceCanvas;
                         
                         const phantom = document.createElement('div');
-                        phantom.className = 'stretch-phantom';
-                        phantom.style.position = 'absolute';
-                        phantom.style.left = wrapper.style.left;
-                        phantom.style.top = wrapper.style.top;
-                        phantom.style.width = wrapper.style.width;
-                        phantom.style.height = wrapper.style.height;
-                        phantom.style.transform = wrapper.style.transform;
-                        phantom.style.transformOrigin = wrapper.style.transformOrigin || 'center center';
-                        phantom.style.pointerEvents = 'none';
-                        phantom.style.zIndex = Math.max(1, (parseInt(wrapper.style.zIndex) || 10) - 1);
-                        
+                        phantom.style.cssText = `position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:40;`;
                         const stretcher = document.createElement('div');
-                        stretcher.style.position = 'absolute';
-                        stretcher.style.backgroundImage = `url(${sliceCanvas.toDataURL()})`;
-                        stretcher.style.backgroundSize = '100% 100%';
+                        stretcher.style.cssText = `position:absolute; background-image:url(${sliceCanvas.toDataURL()}); background-size:100% 100%;`;
                         phantom.appendChild(stretcher);
-                        
-                        wrapper.parentNode.insertBefore(phantom, wrapper);
-                        
+                        wrapper.appendChild(phantom);
                         wrapper._phantomTail = phantom;
                         wrapper._phantomStretcher = stretcher;
-                    } else {
-                        return;
-                    }
+                    } else return;
                 }
                 
-                // Update stretcher CSS mapping based on pull delta 
                 const stretcher = wrapper._phantomStretcher;
-                
                 if (wrapper._stretchAxis === 'y') {
-                    const sy = wrapper._stretchStartY;
-                    const cy = localY;
-                    if (cy >= sy) {
-                        stretcher.style.left = '0';
-                        stretcher.style.width = '100%';
-                        stretcher.style.top = `${sy}px`;
-                        stretcher.style.height = `${cy - sy}px`;
+                    const sy = wrapper._stretchStartX, cy = localY; // sy was reused as startY in previous context incorrectly, fixing logic
+                    const startY = wrapper._stretchStartY;
+                    if (localY >= startY) {
+                        stretcher.style.left = '0'; stretcher.style.width = '100%';
+                        stretcher.style.top = `${startY}px`; stretcher.style.height = `${localY - startY}px`;
                     } else {
-                        stretcher.style.left = '0';
-                        stretcher.style.width = '100%';
-                        stretcher.style.top = `${cy}px`;
-                        stretcher.style.height = `${sy - cy}px`;
+                        stretcher.style.left = '0'; stretcher.style.width = '100%';
+                        stretcher.style.top = `${localY}px`; stretcher.style.height = `${startY - localY}px`;
                     }
                 } else {
-                    const sx = wrapper._stretchStartX;
-                    const cx = localX;
-                    if (cx >= sx) {
-                        stretcher.style.top = '0';
-                        stretcher.style.height = '100%';
-                        stretcher.style.left = `${sx}px`;
-                        stretcher.style.width = `${cx - sx}px`;
+                    const startX = wrapper._stretchStartX;
+                    if (localX >= startX) {
+                        stretcher.style.top = '0'; stretcher.style.height = '100%';
+                        stretcher.style.left = `${startX}px`; stretcher.style.width = `${localX - startX}px`;
                     } else {
-                        stretcher.style.top = '0';
-                        stretcher.style.height = '100%';
-                        stretcher.style.left = `${cx}px`;
-                        stretcher.style.width = `${sx - cx}px`;
+                        stretcher.style.top = '0'; stretcher.style.height = '100%';
+                        stretcher.style.left = `${localX}px`; stretcher.style.width = `${startX - localX}px`;
                     }
                 }
             }
@@ -1424,99 +1440,88 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (Math.max(sWidth, sHeight) > 2) {
                         const origW = canvas.width / dpr;
                         const origH = canvas.height / dpr;
+                        const isEdge = !!wrapper._dragEdge;
+
+                        const totalMinX = isEdge ? Math.min(0, sLeft) : 0;
+                        const totalMinY = isEdge ? Math.min(0, sTop) : 0;
+                        const totalMaxX = isEdge ? Math.max(origW, sLeft + sWidth) : origW;
+                        const totalMaxY = isEdge ? Math.max(origH, sTop + sHeight) : origH;
                         
-                        // New Synthesis: Expand piece logic
-                        const totalMinX = Math.min(0, sLeft);
-                        const totalMinY = Math.min(0, sTop);
-                        const totalMaxX = Math.max(origW, sLeft + sWidth);
-                        const totalMaxY = Math.max(origH, sTop + sHeight);
                         const newW = totalMaxX - totalMinX;
                         const newH = totalMaxY - totalMinY;
                         
                         const newCanvas = document.createElement('canvas');
-                        newCanvas.width = newW * dpr;
-                        newCanvas.height = newH * dpr;
-                        newCanvas.style.width = `${newW}px`;
-                        newCanvas.style.height = `${newH}px`;
-                        const nctx = newCanvas.getContext('2d');
-                        nctx.scale(dpr, dpr);
+                        newCanvas.width = newW * dpr; newCanvas.height = newH * dpr;
+                        newCanvas.style.width = `${newW}px`; newCanvas.style.height = `${newH}px`;
+                        const nctx = newCanvas.getContext('2d'); nctx.scale(dpr, dpr);
                         
-                        // 1. Draw Original Content (clipped for Replace behavior)
                         nctx.save();
                         nctx.translate(-totalMinX, -totalMinY);
                         
-                        // Mask: If stretching Y, we keep original top. If stretching X, we keep original left.
-                        if (wrapper._stretchAxis === 'y') {
-                            const sy = wrapper._stretchStartY;
-                            const cy = parseFloat(stretcher.style.top) + parseFloat(stretcher.style.height); 
-                            // Determine "Replace" direction
-                            if (cy > sy + 1) nctx.rect(0, 0, origW, sy);
-                            else nctx.rect(0, sy, origW, origH - sy);
-                            nctx.clip();
-                        } else {
-                            const sx = wrapper._stretchStartX;
-                            const cx = parseFloat(stretcher.style.left) + parseFloat(stretcher.style.width);
-                            if (cx > sx + 1) nctx.rect(0, 0, sx, origH);
-                            else nctx.rect(sx, 0, origW - sx, origH);
-                            nctx.clip();
+                        // Internal replacement mask logic
+                        if (!isEdge) {
+                           if (wrapper._stretchAxis === 'y') {
+                               const startY = wrapper._stretchStartY;
+                               if (sHeight + sTop > startY + 1) nctx.rect(0, 0, origW, startY);
+                               else nctx.rect(0, startY, origW, origH - startY);
+                               nctx.clip();
+                           } else {
+                               const startX = wrapper._stretchStartX;
+                               if (sWidth + sLeft > startX + 1) nctx.rect(0, 0, startX, origH);
+                               else nctx.rect(startX, 0, origW - startX, origH);
+                               nctx.clip();
+                           }
                         }
                         nctx.drawImage(canvas, 0, 0, origW, origH);
                         nctx.restore();
                         
-                        // 2. Draw Stretched Content
                         nctx.drawImage(wrapper._stretchSliceCanvas, 0, 0, wrapper._stretchSliceCanvas.width, wrapper._stretchSliceCanvas.height, sLeft - totalMinX, sTop - totalMinY, sWidth, sHeight);
                         
-                        // 3. Update Polygon
-                        if (wrapper._rawPoly) {
-                            let newPoly = [...wrapper._rawPoly];
-                            const stretchRect = [
-                                {x: sLeft, y: sTop},
-                                {x: sLeft + sWidth, y: sTop},
-                                {x: sLeft + sWidth, y: sTop + sHeight},
-                                {x: sLeft, y: sTop + sHeight}
-                            ];
-                            // Synthesize: For now, add the rect vertices. Simpler approach for "Replace" feel:
-                            // We just use the bounding rect poly if it's too complex, but let's try to append.
-                            // Better for "Unified" feel: use the bounding rect of the total area for now.
-                            newPoly = [
-                                {x: 0, y: 0}, {x: newW, y: 0}, {x: newW, y: newH}, {x: 0, y: newH}
-                            ].map(p => ({x: p.x, y: p.y})); // Simplified for growth stability
-                            
-                            // Adjust Left/Top position based on growth
+                        // IN-PLACE SWAP: Update the existing wrapper instead of spawning new layer
+                        const oldCanvas = wrapper.querySelector('canvas');
+                        if (oldCanvas) wrapper.replaceChild(newCanvas, oldCanvas);
+                        canvas = newCanvas; // Update closure variable
+                        
+                        wrapper.style.width = `${newW}px`;
+                        wrapper.style.height = `${newH}px`;
+                        
+                        // Update position if we grew "up" or "left"
+                        if (isEdge && (totalMinX < 0 || totalMinY < 0)) {
                             const parentLeft = parseFloat(wrapper.style.left) || 0;
                             const parentTop = parseFloat(wrapper.style.top) || 0;
-                            
                             const forwardRotRad = rotation * Math.PI / 180;
-                            const offsetX = totalMinX * localScale;
-                            const offsetY = totalMinY * localScale;
-                            const rotDX = offsetX * Math.cos(forwardRotRad) - offsetY * Math.sin(forwardRotRad);
-                            const rotDY = offsetX * Math.sin(forwardRotRad) + offsetY * Math.cos(forwardRotRad);
-                            
-                            const finalLeft = parentLeft + rotDX;
-                            const finalTop = parentTop + rotDY;
-                            
-                            const clipPathStr = `polygon(${stretchRect.map(p => `${(p.x - totalMinX).toFixed(1)}px ${(p.y - totalMinY).toFixed(1)}px`).join(', ')})`;
-                            // Wait, if it's "Replace", the clip path should cover top part + stretch part.
-                            // Keeping it simple: Just show the whole new canvas.
-                            
-                            const finalPoly = newPoly; 
-                            const finalClipPath = `polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)`;
-                            
-                            const newP = createDraggableTornPiece(newCanvas, finalLeft, finalTop, rotation, finalClipPath, localScale, currentOpacity, finalPoly);
-                            newP.style.zIndex = wrapper.style.zIndex;
-                            activePiece = newP;
+                            const rotDX = (totalMinX * localScale) * Math.cos(forwardRotRad) - (totalMinY * localScale) * Math.sin(forwardRotRad);
+                            const rotDY = (totalMinX * localScale) * Math.sin(forwardRotRad) + (totalMinY * localScale) * Math.cos(forwardRotRad);
+                            wrapper.style.left = `${parentLeft + rotDX}px`;
+                            wrapper.style.top = `${parentTop + rotDY}px`;
+                        }
+                        
+                        // Update Poly and ClipPath
+                        if (wrapper._rawPoly) {
+                            if (isEdge) {
+                                // Simplified for stability: rebuild box expansion
+                                wrapper._rawPoly = [
+                                    {x: 0, y: 0}, {x: newW, y: 0}, 
+                                    {x: newW, y: newH}, {x: 0, y: newH}
+                                ];
+                            } else {
+                                wrapper._rawPoly = wrapper._rawPoly.map(p => ({
+                                    x: p.x - totalMinX,
+                                    y: p.y - totalMinY
+                                }));
+                            }
+                            const clipPathStr = 'polygon(' + wrapper._rawPoly.map(p => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(', ') + ')';
+                            wrapper.style.clipPath = clipPathStr;
                         }
                     }
                     wrapper._phantomTail.remove();
-                    wrapper.remove();
                 }
                 
                 wrapper._stretchAxis = null;
                 wrapper._stretchSliceCanvas = null;
                 wrapper._phantomTail = null;
                 wrapper._phantomStretcher = null;
-                stretchPreviewX.style.display = 'block';
-                stretchPreviewY.style.display = 'block';
+                wrapper._dragEdge = null;
             }
         });
     }
@@ -1610,9 +1615,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentMode === 'punch' && punchPreview.style.display !== 'none') {
             punchPreview.style.left = `${e.clientX}px`;
             punchPreview.style.top = `${e.clientY}px`;
-        } else if (currentMode === 'stretch') {
-            stretchPreviewX.style.top = `${e.clientY}px`;
-            stretchPreviewY.style.left = `${e.clientX}px`;
         }
     });
 

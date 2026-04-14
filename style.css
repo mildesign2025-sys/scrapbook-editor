@@ -148,6 +148,20 @@ body {
 
 /* Clip Mode Cursor */
 body.mode-clip .torn-piece { cursor: crosshair; }
+body.mode-stretch .torn-piece { cursor: crosshair; }
+
+.stretch-hint {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(215, 60, 44, 0.6); /* supre-red accent */
+    z-index: 50;
+    display: none;
+    box-shadow: 0 0 10px rgba(215, 60, 44, 0.4);
+}
+
+.stretch-hint.active {
+    display: block;
+}
 
 /* Visual Paperclip/Binder Component */
 .paper-binder-clip {
