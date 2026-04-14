@@ -820,7 +820,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // --- 4. Z-DEPTH SHADOW (INNER SHADOW FOR WIPED HOLES) ---
         // This CSS filter natively casts drop shadows inside any erased transparent clusters!
-        frostCanvas.style.filter = 'drop-shadow(2px 5px 6px rgba(0,0,0,0.5))';
+        frostCanvas.style.filter = 'drop-shadow(1px 2px 4px rgba(0,0,0,0.2))';
 
         const waterCanvas = document.createElement('canvas');
         waterCanvas.width = w * dpr; waterCanvas.height = h * dpr;
