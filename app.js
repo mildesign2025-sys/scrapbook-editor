@@ -1282,7 +1282,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (currentMode === 'frost') {
                 wipePoint(e);
-            } else if (currentMode === 'slitscan' || currentMode === 'extend') {
+            } else if (currentMode === 'stretch') {
                 e.preventDefault();
                 const rect = wrapper.getBoundingClientRect();
                 const dx = e.clientX - rect.left;
