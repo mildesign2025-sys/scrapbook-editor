@@ -606,15 +606,6 @@ document.addEventListener('DOMContentLoaded', () => {
             pCtx.drawImage(sourceCanvas, 0, 0, w, h);
 
             // Trace ONLY the torn edge (jaggedPath) for the white paper effects, skipping the original straight bounds
-            pCtx.beginPath();
-            if (isPoly1) {
-                pCtx.moveTo(jaggedPath[0].x, jaggedPath[0].y);
-                for(let i=1; i<jaggedPath.length; i++) pCtx.lineTo(jaggedPath[i].x, jaggedPath[i].y);
-            } else {
-                pCtx.moveTo(jaggedPath[jaggedPath.length-1].x, jaggedPath[jaggedPath.length-1].y);
-                for(let i=jaggedPath.length-2; i>=0; i--) pCtx.lineTo(jaggedPath[i].x, jaggedPath[i].y);
-            }
-
             pCtx.lineCap = "round"; 
             pCtx.lineJoin = "round";
             
@@ -622,39 +613,66 @@ document.addEventListener('DOMContentLoaded', () => {
             pCtx.globalCompositeOperation = 'source-atop';
 
             if (tornEdgeEnabled) {
-                // Base opaque rim
-                pCtx.strokeStyle = tornEdgeColor; 
-                pCtx.lineWidth = 6;
-                pCtx.stroke();
+                const drawnPath = isPoly1 ? jaggedPath : [...jaggedPath].reverse();
 
-                // Transparent fibrous overlaps
-                pCtx.strokeStyle = hexToRgba(tornEdgeColor, 0.4);
-                pCtx.lineWidth = 12;
-                pCtx.stroke();
-                
-                pCtx.strokeStyle = hexToRgba(tornEdgeColor, 0.2);
-                pCtx.lineWidth = 18;
-                pCtx.stroke();
-            }
-            
-            // Random paper chunk tabs (segment by segment)
-            const drawnPath = isPoly1 ? jaggedPath : [...jaggedPath].reverse();
-            let currentThickness = 0;
-            
-            for (let i = 0; i < drawnPath.length - 1; i++) {
-                // Change thickness periodically to simulate paper pulling away clumps
-                if (Math.random() > 0.85) {
-                    if (Math.random() > 0.6) currentThickness = Math.random() * 6 + 6; // 6-12px tab
-                    else currentThickness = 0;
-                }
-                
-                if (currentThickness > 0 && tornEdgeEnabled) {
+                const drawContinuousPath = (width, color) => {
                     pCtx.beginPath();
-                    pCtx.moveTo(drawnPath[i].x, drawnPath[i].y);
-                    pCtx.lineTo(drawnPath[i+1].x, drawnPath[i+1].y);
-                    pCtx.lineWidth = currentThickness + 4;
-                    pCtx.strokeStyle = tornEdgeColor;
+                    pCtx.moveTo(drawnPath[0].x, drawnPath[0].y);
+                    for (let i = 1; i < drawnPath.length; i++) {
+                        pCtx.lineTo(drawnPath[i].x, drawnPath[i].y);
+                    }
+                    pCtx.lineWidth = width;
+                    pCtx.strokeStyle = color;
                     pCtx.stroke();
+                };
+
+                if (isPoly1) {
+                    // WIDE PEEL: Large exposed paper base area + inner dropping shadow
+                    // 1. Base paper core
+                    drawContinuousPath(14, tornEdgeColor);
+                    
+                    // 2. Ink shadow cast onto the paper core
+                    drawContinuousPath(14, 'rgba(0, 0, 0, 0.2)');
+                    drawContinuousPath(11, 'rgba(0, 0, 0, 0.35)');
+                    
+                    // 3. Inner pure paper cover, leaving only the shadow near the ink boundary
+                    drawContinuousPath(8, tornEdgeColor);
+                    
+                    // 4. Organic fiber clumps
+                    let currentThickness = 0;
+                    for (let i = 0; i < drawnPath.length - 1; i++) {
+                        if (Math.random() > 0.8) {
+                            currentThickness = (Math.random() > 0.5) ? Math.random() * 5 + 2 : 0;
+                        }
+                        if (currentThickness > 0) {
+                            pCtx.beginPath();
+                            pCtx.moveTo(drawnPath[i].x, drawnPath[i].y);
+                            pCtx.lineTo(drawnPath[i+1].x, drawnPath[i+1].y);
+                            pCtx.lineWidth = 8 + currentThickness;
+                            pCtx.strokeStyle = tornEdgeColor;
+                            pCtx.stroke();
+                        }
+                    }
+                } else {
+                    // NARROW PEEL: Coating remains mostly intact to the edge. Very little paper exposed.
+                    drawContinuousPath(4, tornEdgeColor);
+                    drawContinuousPath(4, 'rgba(0, 0, 0, 0.1)'); 
+                    drawContinuousPath(2, tornEdgeColor);
+                    
+                    let currentThickness = 0;
+                    for (let i = 0; i < drawnPath.length - 1; i++) {
+                        if (Math.random() > 0.92) {
+                            currentThickness = (Math.random() > 0.5) ? Math.random() * 3 + 1 : 0;
+                        }
+                        if (currentThickness > 0) {
+                            pCtx.beginPath();
+                            pCtx.moveTo(drawnPath[i].x, drawnPath[i].y);
+                            pCtx.lineTo(drawnPath[i+1].x, drawnPath[i+1].y);
+                            pCtx.lineWidth = 2 + currentThickness;
+                            pCtx.strokeStyle = tornEdgeColor;
+                            pCtx.stroke();
+                        }
+                    }
                 }
             }
 
