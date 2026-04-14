@@ -148,7 +148,6 @@ body {
 
 /* Clip Mode Cursor */
 body.mode-clip .torn-piece { cursor: crosshair; }
-body.mode-stretch .torn-piece { cursor: crosshair; }
 
 
 /* Visual Paperclip/Binder Component */
