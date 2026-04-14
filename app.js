@@ -230,6 +230,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = pieceCanvas.getContext('2d');
         ctx.scale(dpr, dpr);
         
+        ctx.drawImage(img, 0, 0, w, h);
+        
+        // Scatter randomly on the table, keep away from the top UI
+        const minX = 40;
+        const maxX = Math.max(minX, window.innerWidth - canvasW - 40);
+        const minY = 180; // Below #ui-container
+        const maxY = Math.max(minY, window.innerHeight - canvasH - 40);
+        
         const startX = minX + Math.random() * (maxX - minX);
         const startY = minY + Math.random() * (maxY - minY);
         
