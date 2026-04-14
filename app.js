@@ -788,14 +788,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const fctx = frostCanvas.getContext('2d', { willReadFrequently: true });
         fctx.scale(dpr, dpr);
         
-        // Create solid frosted layer (heavy blur + tint overlay)
+        // --- 1. REFRACTION / PARALLAX ---
+        // Slightly scale up the image before blurring to create a refractive mismatch
         fctx.filter = 'blur(12px)';
+        fctx.translate(w/2, h/2);
+        fctx.scale(1.025, 1.025); // 2.5% refraction magnification
+        fctx.translate(-w/2, -h/2);
         fctx.drawImage(wrapper._sourceBuffer, 0, 0, w, h);
+        
+        fctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         fctx.filter = 'none';
         
+        // --- 2. GLASS HIGHLIGHT OVERLAY ---
         fctx.globalCompositeOperation = 'source-over';
         fctx.fillStyle = 'rgba(230, 240, 255, 0.4)'; // Icy condensation fog
         fctx.fillRect(0, 0, w, h);
+
+        // Diagonal specular highlight (hard light gradient) to give the pane volumetric feel
+        const grad = fctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+        grad.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
+        fctx.fillStyle = grad;
+        fctx.fillRect(0, 0, w, h);
+
+        // --- 3. HARD BOUNDARY CROP ---
+        // Because of the scaling, we need to shave off the edges back to the exact shape of the torn piece
+        fctx.globalCompositeOperation = 'destination-in';
+        fctx.drawImage(wrapper._sourceBuffer, 0, 0, w, h);
+        fctx.globalCompositeOperation = 'source-over';
+
+        // --- 4. Z-DEPTH SHADOW (INNER SHADOW FOR WIPED HOLES) ---
+        // This CSS filter natively casts drop shadows inside any erased transparent clusters!
+        frostCanvas.style.filter = 'drop-shadow(2px 5px 6px rgba(0,0,0,0.5))';
 
         const waterCanvas = document.createElement('canvas');
         waterCanvas.width = w * dpr; waterCanvas.height = h * dpr;
