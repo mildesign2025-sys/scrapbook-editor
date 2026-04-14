@@ -12,7 +12,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const modePunchBtn = document.getElementById('modePunch');
     const tearControl = document.getElementById('tearControl');
     const toggleTornEdge = document.getElementById('toggleTornEdge');
-    const tornEdgeColorInput = document.getElementById('tornEdgeColorInput');
     const punchControl = document.getElementById('punchControl');
     const punchSizeSlider = document.getElementById('punchSize');
     const frostControl = document.getElementById('frostControl');
@@ -33,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let wetFrostEnabled = true;
     let selectedPiecesForClip = [];
     let tornEdgeEnabled = true;
-    let tornEdgeColor = '#fefcf8';
+    const tornEdgeColor = '#fefcf8';
     document.body.classList.add('mode-tear');
 
     function updateMode(newMode) {
@@ -100,10 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     toggleTornEdge.addEventListener('change', () => {
         tornEdgeEnabled = toggleTornEdge.checked;
-    });
-
-    tornEdgeColorInput.addEventListener('input', () => {
-        tornEdgeColor = tornEdgeColorInput.value;
     });
 
     function hexToRgba(hex, alpha) {
