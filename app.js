@@ -606,103 +606,56 @@ document.addEventListener('DOMContentLoaded', () => {
             pCtx.drawImage(sourceCanvas, 0, 0, w, h);
 
             // Trace ONLY the torn edge (jaggedPath) for the white paper effects, skipping the original straight bounds
+            pCtx.beginPath();
+            if (isPoly1) {
+                pCtx.moveTo(jaggedPath[0].x, jaggedPath[0].y);
+                for(let i=1; i<jaggedPath.length; i++) pCtx.lineTo(jaggedPath[i].x, jaggedPath[i].y);
+            } else {
+                pCtx.moveTo(jaggedPath[jaggedPath.length-1].x, jaggedPath[jaggedPath.length-1].y);
+                for(let i=jaggedPath.length-2; i>=0; i--) pCtx.lineTo(jaggedPath[i].x, jaggedPath[i].y);
+            }
+
             pCtx.lineCap = "round"; 
             pCtx.lineJoin = "round";
             
             // Mask the fiber edges to the actual content pixels
-            // pCtx.globalCompositeOperation = 'source-atop'; // We manage this dynamically now!
+            pCtx.globalCompositeOperation = 'source-atop';
 
             if (tornEdgeEnabled) {
-                const drawnPath = isPoly1 ? jaggedPath : [...jaggedPath].reverse();
-                
-                // Center of the piece bounding box (in absolute coords relative to the source clip)
-                let centerAbsX = minX + pw / 2;
-                let centerAbsY = minY + ph / 2;
+                // Base opaque rim
+                pCtx.strokeStyle = tornEdgeColor; 
+                pCtx.lineWidth = 6;
+                pCtx.stroke();
 
-                let inkPath = [];
-                let basePeel = isPoly1 ? 12 : 2;
-                let currentPeel = basePeel;
-                
-                for (let i = 0; i < drawnPath.length; i++) {
-                    // Randomly drift the peel amount for fibrous look
-                    currentPeel += (Math.random() - 0.5) * 8; // Change per step
-                    
-                    // Clamp thickness
-                    let minPeel = isPoly1 ? 4 : 0;
-                    let maxPeel = isPoly1 ? 25 : 6;
-                    if (currentPeel < minPeel) currentPeel = minPeel;
-                    if (currentPeel > maxPeel) currentPeel = maxPeel;
-
-                    let px = drawnPath[i].x;
-                    let py = drawnPath[i].y;
-                    
-                    let vx = centerAbsX - px;
-                    let vy = centerAbsY - py;
-                    let len = Math.hypot(vx, vy) || 1;
-                    
-                    inkPath.push({
-                        x: px + (vx / len) * currentPeel,
-                        y: py + (vy / len) * currentPeel
-                    });
-                }
-
-                // 1. ERASE the image coating in the peel region to reveal "transparent" background
-                pCtx.globalCompositeOperation = 'destination-out';
-                pCtx.beginPath();
-                pCtx.moveTo(drawnPath[0].x, drawnPath[0].y);
-                for (let i = 1; i < drawnPath.length; i++) pCtx.lineTo(drawnPath[i].x, drawnPath[i].y);
-                for (let i = inkPath.length - 1; i >= 0; i--) pCtx.lineTo(inkPath[i].x, inkPath[i].y);
-                pCtx.closePath();
-                pCtx.fill();
-                
-                // 2. FILL the peeled region with the physical paper core color! 
-                // Using destination-over puts it behind the image layer, filling the transparent gap seamlessly.
-                pCtx.globalCompositeOperation = 'destination-over';
-                pCtx.fillStyle = tornEdgeColor;
-                pCtx.fill();
-
-                // 3. Draw cast shadow from the coating edge ONTO the paper core
-                pCtx.globalCompositeOperation = 'source-atop'; // Draw over existing pixels normally
-                
-                pCtx.save();
-                // Clip so we ONLY draw shadow on the paper layer, NOT over the image!
-                pCtx.beginPath();
-                pCtx.moveTo(drawnPath[0].x, drawnPath[0].y);
-                for (let i = 1; i < drawnPath.length; i++) pCtx.lineTo(drawnPath[i].x, drawnPath[i].y);
-                for (let i = inkPath.length - 1; i >= 0; i--) pCtx.lineTo(inkPath[i].x, inkPath[i].y);
-                pCtx.closePath();
-                pCtx.clip();
-
-                // Draw the actual shadow line along the ink edge
-                pCtx.beginPath();
-                pCtx.moveTo(inkPath[0].x, inkPath[0].y);
-                for (let i = 1; i < inkPath.length; i++) pCtx.lineTo(inkPath[i].x, inkPath[i].y);
-                
-                pCtx.lineWidth = isPoly1 ? 6 : 2; // Darker shadow for thicker peel
-                pCtx.strokeStyle = 'rgba(0, 0, 0, 0.4)';
-                pCtx.lineCap = "round";
-                pCtx.lineJoin = "round";
-                // Adding a slight blur makes it vastly more realistic as a shadow!
-                pCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-                pCtx.shadowBlur = 4;
+                // Transparent fibrous overlaps
+                pCtx.strokeStyle = hexToRgba(tornEdgeColor, 0.4);
+                pCtx.lineWidth = 12;
                 pCtx.stroke();
                 
-                // Add tiny physical paper fibers scattered on the paper core!
-                pCtx.lineWidth = 1;
-                pCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; // Slight highlight fibers
-                for (let i = 0; i < drawnPath.length - 1; i+=2) {
-                    if (Math.random() > 0.3) {
-                        pCtx.beginPath();
-                        pCtx.moveTo(inkPath[i].x, inkPath[i].y);
-                        // Fiber ends randomly near drawnPath
-                        let fx = drawnPath[i].x + (Math.random() - 0.5) * 6;
-                        let fy = drawnPath[i].y + (Math.random() - 0.5) * 6;
-                        pCtx.lineTo(fx, fy);
-                        pCtx.stroke();
-                    }
+                pCtx.strokeStyle = hexToRgba(tornEdgeColor, 0.2);
+                pCtx.lineWidth = 18;
+                pCtx.stroke();
+            }
+            
+            // Random paper chunk tabs (segment by segment)
+            const drawnPath = isPoly1 ? jaggedPath : [...jaggedPath].reverse();
+            let currentThickness = 0;
+            
+            for (let i = 0; i < drawnPath.length - 1; i++) {
+                // Change thickness periodically to simulate paper pulling away clumps
+                if (Math.random() > 0.85) {
+                    if (Math.random() > 0.6) currentThickness = Math.random() * 6 + 6; // 6-12px tab
+                    else currentThickness = 0;
                 }
                 
-                pCtx.restore();
+                if (currentThickness > 0 && tornEdgeEnabled) {
+                    pCtx.beginPath();
+                    pCtx.moveTo(drawnPath[i].x, drawnPath[i].y);
+                    pCtx.lineTo(drawnPath[i+1].x, drawnPath[i+1].y);
+                    pCtx.lineWidth = currentThickness + 4;
+                    pCtx.strokeStyle = tornEdgeColor;
+                    pCtx.stroke();
+                }
             }
 
             // Reset composite mode to default
