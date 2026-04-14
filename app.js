@@ -19,7 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
-    const modeStretchBtn = document.getElementById('modeStretch');
+    const modeExtendBtn = document.getElementById('modeExtend');
+    const modeSlitScanBtn = document.getElementById('modeSlitScan');
     const stretchControl = document.getElementById('stretchControl');
     const modeClipBtn = document.getElementById('modeClip');
     const modeDeleteBtn = document.getElementById('modeDelete');
@@ -39,23 +40,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateMode(newMode) {
         currentMode = newMode;
-        modeTearBtn.classList.toggle('active', newMode === 'tear');
-        modePunchBtn.classList.toggle('active', newMode === 'punch');
-        modeDragBtn.classList.toggle('active', newMode === 'drag');
-        modeFrostBtn.classList.toggle('active', newMode === 'frost');
-        modeStretchBtn.classList.toggle('active', newMode === 'stretch');
+        modeSlitScanBtn.classList.toggle('active', newMode === 'slitscan');
+        modeExtendBtn.classList.toggle('active', newMode === 'extend');
         modeClipBtn.classList.toggle('active', newMode === 'clip');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
         
         tearControl.classList.toggle('hidden', newMode !== 'tear');
         punchControl.classList.toggle('hidden', newMode !== 'punch');
         frostControl.classList.toggle('hidden', newMode !== 'frost');
-        stretchControl.classList.toggle('hidden', newMode !== 'stretch');
+        stretchControl.classList.toggle('hidden', (newMode !== 'slitscan' && newMode !== 'extend'));
         clipControl.classList.toggle('hidden', newMode !== 'clip');
         
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
 
-        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-stretch', 'mode-delete', 'mode-clip');
+        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-slitscan', 'mode-extend', 'mode-delete', 'mode-clip');
         document.body.classList.add(`mode-${newMode}`);
         
         // Reset selection when changing modes
@@ -76,7 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
     modePunchBtn.addEventListener('click', () => updateMode('punch'));
     modeDragBtn.addEventListener('click', () => updateMode('drag'));
     modeFrostBtn.addEventListener('click', () => updateMode('frost'));
-    modeStretchBtn.addEventListener('click', () => updateMode('stretch'));
+    modeSlitScanBtn.addEventListener('click', () => updateMode('slitscan'));
+    modeExtendBtn.addEventListener('click', () => updateMode('extend'));
     modeClipBtn.addEventListener('click', () => updateMode('clip'));
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
 
@@ -1037,13 +1036,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         wrapper.addEventListener('pointermove', (e) => {
-            if (currentMode === 'stretch' && !isInteracting) {
+            if (currentMode === 'extend' && !isInteracting) {
                 const rect = wrapper.getBoundingClientRect();
                 const dx = e.clientX - rect.left;
                 const dy = e.clientY - rect.top;
                 const rotRad = -rotation * Math.PI / 180;
                 
-                // Local unrotated coordinates
+                // Local unrotated coordinates relative to top-left of unrotated bounding box
                 const cx = rect.width / 2;
                 const cy = rect.height / 2;
                 const ux = (dx - cx) * Math.cos(rotRad) - (dy - cy) * Math.sin(rotRad) + (canvas.width / dpr / 2);
@@ -1051,7 +1050,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const w = canvas.width / dpr;
                 const h = canvas.height / dpr;
-                const threshold = 20;
+                const threshold = 25; // Slightly larger threshold for better accessibility
                 
                 stretchHint.classList.remove('active');
                 wrapper._activeEdge = null;
@@ -1059,25 +1058,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (uy < threshold) {
                     wrapper._activeEdge = 'top';
                     stretchHint.style.top = '0'; stretchHint.style.left = '0';
-                    stretchHint.style.width = '100%'; stretchHint.style.height = '4px';
+                    stretchHint.style.width = '100%'; stretchHint.style.height = '6px';
                     stretchHint.classList.add('active');
                 } else if (uy > h - threshold) {
                     wrapper._activeEdge = 'bottom';
                     stretchHint.style.bottom = '0'; stretchHint.style.left = '0';
-                    stretchHint.style.width = '100%'; stretchHint.style.height = '4px';
+                    stretchHint.style.width = '100%'; stretchHint.style.height = '6px';
                     stretchHint.classList.add('active');
                 } else if (ux < threshold) {
                     wrapper._activeEdge = 'left';
                     stretchHint.style.left = '0'; stretchHint.style.top = '0';
-                    stretchHint.style.height = '100%'; stretchHint.style.width = '4px';
+                    stretchHint.style.height = '100%'; stretchHint.style.width = '6px';
                     stretchHint.classList.add('active');
                 } else if (ux > w - threshold) {
                     wrapper._activeEdge = 'right';
                     stretchHint.style.right = '0'; stretchHint.style.top = '0';
-                    stretchHint.style.height = '100%'; stretchHint.style.width = '4px';
+                    stretchHint.style.height = '100%'; stretchHint.style.width = '6px';
                     stretchHint.classList.add('active');
                 }
-            } else if (currentMode !== 'stretch') {
+            } else {
                 stretchHint.classList.remove('active');
             }
         });
@@ -1211,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 wrapper._lastWipe = null;
                 wipePoint(e);
-            } else if (currentMode === 'stretch') {
+            } else if (currentMode === 'slitscan' || currentMode === 'extend') {
                 const rect = wrapper.getBoundingClientRect();
                 const dx = e.clientX - rect.left;
                 const dy = e.clientY - rect.top;
@@ -1222,7 +1221,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 wrapper._stretchStartX = (dx - cx) * Math.cos(rotRad) - (dy - cy) * Math.sin(rotRad) + (canvas.width / dpr / 2);
                 wrapper._stretchStartY = (dx - cx) * Math.sin(rotRad) + (dy - cy) * Math.cos(rotRad) + (canvas.height / dpr / 2);
                 
-                wrapper._dragEdge = wrapper._activeEdge; // Use the edge detected during hover
+                // For Slit Scan, we ignore borders. For Extend, we use the border detected by hover.
+                wrapper._dragEdge = currentMode === 'extend' ? wrapper._activeEdge : null;
+                
                 wrapper._stretchAxis = null;
                 wrapper._stretchSliceCanvas = null;
                 wrapper._phantomTail = null;
@@ -1330,7 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (currentMode === 'frost') {
                 wipePoint(e);
-            } else if (currentMode === 'stretch') {
+            } else if (currentMode === 'slitscan' || currentMode === 'extend') {
                 e.preventDefault();
                 const rect = wrapper.getBoundingClientRect();
                 const dx = e.clientX - rect.left;
@@ -1358,11 +1359,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         const sctx = sliceCanvas.getContext('2d');
                         
                         if (wrapper._stretchAxis === 'y') {
-                            sliceCanvas.width = canvas.width; sliceCanvas.height = 1;
-                            sctx.drawImage(canvas, 0, Math.floor(sy * dpr), canvas.width, 1, 0, 0, canvas.width, 1);
+                            sliceCanvas.width = canvas.width; sliceCanvas.height = 2; // Extra px for overlap stability
+                            sctx.drawImage(canvas, 0, Math.floor(sy * dpr), canvas.width, 2, 0, 0, canvas.width, 2);
                         } else {
-                            sliceCanvas.width = 1; sliceCanvas.height = canvas.height;
-                            sctx.drawImage(canvas, Math.floor(sx * dpr), 0, 1, canvas.height, 0, 0, 1, canvas.height);
+                            sliceCanvas.width = 2; sliceCanvas.height = canvas.height;
+                            sctx.drawImage(canvas, Math.floor(sx * dpr), 0, 2, canvas.height, 0, 0, 2, canvas.height);
                         }
                         wrapper._stretchSliceCanvas = sliceCanvas;
                         
@@ -1379,7 +1380,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const stretcher = wrapper._phantomStretcher;
                 if (wrapper._stretchAxis === 'y') {
-                    const sy = wrapper._stretchStartX, cy = localY; // sy was reused as startY in previous context incorrectly, fixing logic
                     const startY = wrapper._stretchStartY;
                     if (localY >= startY) {
                         stretcher.style.left = '0'; stretcher.style.width = '100%';
@@ -1429,7 +1429,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (currentMode === 'frost') {
                 wrapper._lastWipe = null;
-            } else if (currentMode === 'stretch') {
+            } else if (currentMode === 'slitscan' || currentMode === 'extend') {
                 if (wrapper._phantomTail && wrapper._phantomStretcher) {
                     const stretcher = wrapper._phantomStretcher;
                     const sTop = parseFloat(stretcher.style.top);
@@ -1437,7 +1437,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const sWidth = parseFloat(stretcher.style.width);
                     const sHeight = parseFloat(stretcher.style.height);
                     
-                    if (Math.max(sWidth, sHeight) > 2) {
+                    if (Math.max(sWidth, sHeight) > 1) {
                         const origW = canvas.width / dpr;
                         const origH = canvas.height / dpr;
                         const isEdge = !!wrapper._dragEdge;
@@ -1451,14 +1451,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         const newH = totalMaxY - totalMinY;
                         
                         const newCanvas = document.createElement('canvas');
-                        newCanvas.width = newW * dpr; newCanvas.height = newH * dpr;
+                        newCanvas.width = Math.round(newW * dpr); newCanvas.height = Math.round(newH * dpr);
                         newCanvas.style.width = `${newW}px`; newCanvas.style.height = `${newH}px`;
                         const nctx = newCanvas.getContext('2d'); nctx.scale(dpr, dpr);
                         
                         nctx.save();
                         nctx.translate(-totalMinX, -totalMinY);
                         
-                        // Internal replacement mask logic
                         if (!isEdge) {
                            if (wrapper._stretchAxis === 'y') {
                                const startY = wrapper._stretchStartY;
@@ -1475,48 +1474,41 @@ document.addEventListener('DOMContentLoaded', () => {
                         nctx.drawImage(canvas, 0, 0, origW, origH);
                         nctx.restore();
                         
+                        // Draw the stretch tail with sub-pixel alignment correction
                         nctx.drawImage(wrapper._stretchSliceCanvas, 0, 0, wrapper._stretchSliceCanvas.width, wrapper._stretchSliceCanvas.height, sLeft - totalMinX, sTop - totalMinY, sWidth, sHeight);
                         
-                        // IN-PLACE SWAP: Update the existing wrapper instead of spawning new layer
                         const oldCanvas = wrapper.querySelector('canvas');
                         if (oldCanvas) wrapper.replaceChild(newCanvas, oldCanvas);
-                        canvas = newCanvas; // Update closure variable
+                        canvas = newCanvas;
                         
                         wrapper.style.width = `${newW}px`;
                         wrapper.style.height = `${newH}px`;
                         
-                        // Update position if we grew "up" or "left"
-                        if (isEdge && (totalMinX < 0 || totalMinY < 0)) {
+                        // STATIONARY PIXEL ANCHOR: Offset wrapper position to compensate for canvas growth 
+                        // and ensure the original contents stay locked in desk space.
+                        if (isEdge && (totalMinX !== 0 || totalMinY !== 0)) {
                             const parentLeft = parseFloat(wrapper.style.left) || 0;
                             const parentTop = parseFloat(wrapper.style.top) || 0;
                             const forwardRotRad = rotation * Math.PI / 180;
-                            const rotDX = (totalMinX * localScale) * Math.cos(forwardRotRad) - (totalMinY * localScale) * Math.sin(forwardRotRad);
-                            const rotDY = (totalMinX * localScale) * Math.sin(forwardRotRad) + (totalMinY * localScale) * Math.cos(forwardRotRad);
+                            const scaledLX = totalMinX * localScale;
+                            const scaledLY = totalMinY * localScale;
+                            const rotDX = scaledLX * Math.cos(forwardRotRad) - scaledLY * Math.sin(forwardRotRad);
+                            const rotDY = scaledLX * Math.sin(forwardRotRad) + scaledLY * Math.cos(forwardRotRad);
                             wrapper.style.left = `${parentLeft + rotDX}px`;
                             wrapper.style.top = `${parentTop + rotDY}px`;
                         }
                         
-                        // Update Poly and ClipPath
                         if (wrapper._rawPoly) {
                             if (isEdge) {
-                                // Simplified for stability: rebuild box expansion
-                                wrapper._rawPoly = [
-                                    {x: 0, y: 0}, {x: newW, y: 0}, 
-                                    {x: newW, y: newH}, {x: 0, y: newH}
-                                ];
+                                wrapper._rawPoly = [{x: 0, y: 0}, {x: newW, y: 0}, {x: newW, y: newH}, {x: 0, y: newH}];
                             } else {
-                                wrapper._rawPoly = wrapper._rawPoly.map(p => ({
-                                    x: p.x - totalMinX,
-                                    y: p.y - totalMinY
-                                }));
+                                wrapper._rawPoly = wrapper._rawPoly.map(p => ({ x: p.x - totalMinX, y: p.y - totalMinY }));
                             }
-                            const clipPathStr = 'polygon(' + wrapper._rawPoly.map(p => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(', ') + ')';
-                            wrapper.style.clipPath = clipPathStr;
+                            wrapper.style.clipPath = 'polygon(' + wrapper._rawPoly.map(p => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(', ') + ')';
                         }
                     }
                     wrapper._phantomTail.remove();
                 }
-                
                 wrapper._stretchAxis = null;
                 wrapper._stretchSliceCanvas = null;
                 wrapper._phantomTail = null;
