@@ -1389,20 +1389,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         newCanvas.style.width = canvas.style.width; newCanvas.style.height = canvas.style.height;
                         const nctx = newCanvas.getContext('2d'); nctx.scale(dpr, dpr);
                         
-                        nctx.save();
-                        if (wrapper._stretchAxis === 'y') {
-                           const startY = wrapper._stretchStartY;
-                           // Draw the part of the image that isn't being overwritten by the stretch
-                           if (sHeight + sTop > startY + 1) nctx.rect(0, 0, origW, startY);
-                           else nctx.rect(0, startY, origW, origH - startY);
-                        } else {
-                           const startX = wrapper._stretchStartX;
-                           if (sWidth + sLeft > startX + 1) nctx.rect(0, 0, startX, origH);
-                           else nctx.rect(startX, 0, origW - startX, origH);
-                        }
-                        nctx.clip();
                         nctx.drawImage(canvas, 0, 0, origW, origH);
-                        nctx.restore();
+
                         
                         // Draw the stretched slice OVER the area
                         nctx.drawImage(wrapper._stretchSliceCanvas, 0, 0, wrapper._stretchSliceCanvas.width, wrapper._stretchSliceCanvas.height, sLeft, sTop, sWidth, sHeight);
