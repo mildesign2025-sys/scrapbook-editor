@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const punchPreview = document.getElementById('punchPreview');
     const modeDragBtn = document.getElementById('modeDrag');
     const modeFrostBtn = document.getElementById('modeFrost');
+    const modeStretchBtn = document.getElementById('modeStretch');
     const modeClipBtn = document.getElementById('modeClip');
     const modeDeleteBtn = document.getElementById('modeDelete');
     const toggleWetFrost = document.getElementById('toggleWetFrost');
@@ -41,6 +42,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modePunchBtn.classList.toggle('active', newMode === 'punch');
         modeDragBtn.classList.toggle('active', newMode === 'drag');
         modeFrostBtn.classList.toggle('active', newMode === 'frost');
+        modeStretchBtn.classList.toggle('active', newMode === 'stretch');
         modeClipBtn.classList.toggle('active', newMode === 'clip');
         modeDeleteBtn.classList.toggle('active', newMode === 'delete');
         
@@ -51,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         punchPreview.style.display = newMode === 'punch' ? 'block' : 'none';
 
-        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-delete', 'mode-clip');
+        document.body.classList.remove('mode-tear', 'mode-punch', 'mode-drag', 'mode-frost', 'mode-stretch', 'mode-delete', 'mode-clip');
         document.body.classList.add(`mode-${newMode}`);
         
         // Reset selection when changing modes
@@ -72,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modePunchBtn.addEventListener('click', () => updateMode('punch'));
     modeDragBtn.addEventListener('click', () => updateMode('drag'));
     modeFrostBtn.addEventListener('click', () => updateMode('frost'));
+    modeStretchBtn.addEventListener('click', () => updateMode('stretch'));
     modeClipBtn.addEventListener('click', () => updateMode('clip'));
     modeDeleteBtn.addEventListener('click', () => updateMode('delete'));
 
@@ -1160,6 +1163,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 wrapper._lastWipe = null;
                 wipePoint(e);
+            } else if (currentMode === 'stretch') {
+                const rect = wrapper.getBoundingClientRect();
+                const dx = e.clientX - rect.left;
+                const dy = e.clientY - rect.top;
+                const rotRad = -rotation * Math.PI / 180;
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
+                
+                wrapper._stretchStartX = (dx - cx) * Math.cos(rotRad) - (dy - cy) * Math.sin(rotRad) + (canvas.width / dpr / 2);
+                wrapper._stretchStartY = (dx - cx) * Math.sin(rotRad) + (dy - cy) * Math.cos(rotRad) + (canvas.height / dpr / 2);
+                
+                wrapper._stretchAxis = null;
+                wrapper._stretchSliceCanvas = null;
+                wrapper._phantomTail = null;
+                wrapper._phantomStretcher = null;
             }
         });
 
@@ -1260,8 +1278,68 @@ document.addEventListener('DOMContentLoaded', () => {
                     drawCtx.setLineDash([4, 4]);
                     drawCtx.stroke();
                 }
-            } else if (currentMode === 'frost') {
-                wipePoint(e);
+            } else if (currentMode === 'stretch') {
+                e.preventDefault();
+                const rect = wrapper.getBoundingClientRect();
+                const dx = e.clientX - rect.left;
+                const dy = e.clientY - rect.top;
+                const rotRad = -rotation * Math.PI / 180;
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
+                
+                const localX = (dx - cx) * Math.cos(rotRad) - (dy - cy) * Math.sin(rotRad) + (canvas.width / dpr / 2);
+                const localY = (dx - cx) * Math.sin(rotRad) + (dy - cy) * Math.cos(rotRad) + (canvas.height / dpr / 2);
+                
+                if (!wrapper._stretchAxis) {
+                    const distTotal = Math.hypot(localX - wrapper._stretchStartX, localY - wrapper._stretchStartY);
+                    if (distTotal > 5) {
+                        wrapper._stretchAxis = Math.abs(localX - wrapper._stretchStartX) > Math.abs(localY - wrapper._stretchStartY) ? 'x' : 'y';
+                        
+                        const sx = wrapper._stretchStartX;
+                        const sy = wrapper._stretchStartY;
+                        const sliceCanvas = document.createElement('canvas');
+                        const sctx = sliceCanvas.getContext('2d');
+                        
+                        if (wrapper._stretchAxis === 'y') {
+                            sliceCanvas.width = canvas.width; sliceCanvas.height = 1;
+                            sctx.drawImage(canvas, 0, Math.floor(sy * dpr), canvas.width, 1, 0, 0, canvas.width, 1);
+                        } else {
+                            sliceCanvas.width = 1; sliceCanvas.height = canvas.height;
+                            sctx.drawImage(canvas, Math.floor(sx * dpr), 0, 1, canvas.height, 0, 0, 1, canvas.height);
+                        }
+                        wrapper._stretchSliceCanvas = sliceCanvas;
+                        
+                        const phantom = document.createElement('div');
+                        phantom.style.cssText = `position:absolute; left:0; top:0; width:100%; height:100%; pointer-events:none; z-index:40;`;
+                        const stretcher = document.createElement('div');
+                        stretcher.style.cssText = `position:absolute; background-image:url(${sliceCanvas.toDataURL()}); background-size:100% 100%;`;
+                        phantom.appendChild(stretcher);
+                        wrapper.appendChild(phantom);
+                        wrapper._phantomTail = phantom;
+                        wrapper._phantomStretcher = stretcher;
+                    } else return;
+                }
+                
+                const stretcher = wrapper._phantomStretcher;
+                if (wrapper._stretchAxis === 'y') {
+                    const startY = wrapper._stretchStartY;
+                    if (localY >= startY) {
+                        stretcher.style.left = '0'; stretcher.style.width = '100%';
+                        stretcher.style.top = `${startY}px`; stretcher.style.height = `${localY - startY}px`;
+                    } else {
+                        stretcher.style.left = '0'; stretcher.style.width = '100%';
+                        stretcher.style.top = `${localY}px`; stretcher.style.height = `${startY - localY}px`;
+                    }
+                } else {
+                    const startX = wrapper._stretchStartX;
+                    if (localX >= startX) {
+                        stretcher.style.top = '0'; stretcher.style.height = '100%';
+                        stretcher.style.left = `${startX}px`; stretcher.style.width = `${localX - startX}px`;
+                    } else {
+                        stretcher.style.top = '0'; stretcher.style.height = '100%';
+                        stretcher.style.left = `${localX}px`; stretcher.style.width = `${startX - localX}px`;
+                    }
+                }
             }
         });
 
@@ -1293,6 +1371,57 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else if (currentMode === 'frost') {
                 wrapper._lastWipe = null;
+            } else if (currentMode === 'stretch') {
+                if (wrapper._phantomTail && wrapper._phantomStretcher) {
+                    const stretcher = wrapper._phantomStretcher;
+                    const sTop = parseFloat(stretcher.style.top);
+                    const sLeft = parseFloat(stretcher.style.left);
+                    const sWidth = parseFloat(stretcher.style.width);
+                    const sHeight = parseFloat(stretcher.style.height);
+                    
+                    if (Math.max(sWidth, sHeight) > 1) {
+                        const origW = canvas.width / dpr;
+                        const origH = canvas.height / dpr;
+                        
+                        // Synthesis: In-place internal replace only
+                        const newCanvas = document.createElement('canvas');
+                        newCanvas.width = canvas.width; newCanvas.height = canvas.height;
+                        newCanvas.style.width = canvas.style.width; newCanvas.style.height = canvas.style.height;
+                        const nctx = newCanvas.getContext('2d'); nctx.scale(dpr, dpr);
+                        
+                        nctx.save();
+                        if (wrapper._stretchAxis === 'y') {
+                           const startY = wrapper._stretchStartY;
+                           // Draw the part of the image that isn't being overwritten by the stretch
+                           if (sHeight + sTop > startY + 1) nctx.rect(0, 0, origW, startY);
+                           else nctx.rect(0, startY, origW, origH - startY);
+                        } else {
+                           const startX = wrapper._stretchStartX;
+                           if (sWidth + sLeft > startX + 1) nctx.rect(0, 0, startX, origH);
+                           else nctx.rect(startX, 0, origW - startX, origH);
+                        }
+                        nctx.clip();
+                        nctx.drawImage(canvas, 0, 0, origW, origH);
+                        nctx.restore();
+                        
+                        // Draw the stretched slice OVER the area
+                        nctx.drawImage(wrapper._stretchSliceCanvas, 0, 0, wrapper._stretchSliceCanvas.width, wrapper._stretchSliceCanvas.height, sLeft, sTop, sWidth, sHeight);
+                        
+                        const oldCanvas = wrapper.querySelector('canvas');
+                        if (oldCanvas) wrapper.replaceChild(newCanvas, oldCanvas);
+                        canvas = newCanvas;
+                        
+                        if (wrapper._rawPoly) {
+                            wrapper._rawPoly = wrapper._rawPoly.map(p => ({ x: p.x, y: p.y }));
+                            wrapper.style.clipPath = 'polygon(' + wrapper._rawPoly.map(p => `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`).join(', ') + ')';
+                        }
+                    }
+                    wrapper._phantomTail.remove();
+                }
+                wrapper._stretchAxis = null;
+                wrapper._stretchSliceCanvas = null;
+                wrapper._phantomTail = null;
+                wrapper._phantomStretcher = null;
             }
         });
     }
